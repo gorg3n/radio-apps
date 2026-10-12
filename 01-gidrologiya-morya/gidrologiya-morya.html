@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Гидрология моря — симулятор ГАС</title>
+<style>
+  :root{
+    --bg:#0b1622; --panel:#101f30; --panel2:#0d1a2a;
+    --line:#1d3350; --text:#dce8f2; --dim:#8fa3b8; --accent:#6fd3ff; --ok:#4cd97b; --warn:#ffd34d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font:14px/1.5 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  }
+  header{padding:18px 22px 10px}
+  header h1{margin:0;font-size:22px;font-weight:600;letter-spacing:.2px}
+  header .sub{color:var(--dim);margin-top:4px;font-size:13px}
+  .layout{
+    display:grid; grid-template-columns:290px minmax(0,1fr) 300px; gap:14px;
+    padding:0 22px; align-items:start;
+  }
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .panel h2{margin:2px 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim)}
+  .panel h2:not(:first-child){margin-top:18px}
+
+  /* --- типы гидрологии --- */
+  .type-btn{
+    display:flex;gap:10px;align-items:center;width:100%;text-align:left;cursor:pointer;
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:8px 10px;margin-bottom:7px;color:var(--text);
+    transition:border-color .15s, background .15s;
+  }
+  .type-btn:hover{border-color:#2c4a70}
+  .type-btn.active{border-color:var(--accent);background:#12263c}
+  .type-btn canvas{width:56px;height:30px;flex:0 0 56px;border-radius:6px;background:#0a1828}
+  .type-btn .t-name{font-size:13px;font-weight:600;line-height:1.25}
+  .type-btn .t-tag{font-size:11px;color:var(--dim)}
+  .type-btn.active .t-name{color:var(--accent)}
+
+  /* --- контролы --- */
+  .ctl{margin:10px 0}
+  .ctl label{display:flex;justify-content:space-between;font-size:13px;color:var(--text);margin-bottom:4px}
+  .ctl label b{color:var(--accent);font-weight:600}
+  input[type=range]{width:100%;accent-color:#4aa8d8}
+  .chk{display:flex;gap:8px;align-items:center;font-size:13px;margin:10px 0;cursor:pointer}
+  .note{font-size:11.5px;color:var(--dim);margin-top:6px}
+
+  .legend{font-size:12px;color:var(--dim)}
+  .legend .row{display:flex;gap:9px;align-items:center;margin:6px 0}
+  .sw{width:22px;height:12px;border-radius:3px;flex:0 0 22px}
+  .sw.ray{background:linear-gradient(90deg,rgba(150,228,255,.15),rgba(150,228,255,.75))}
+  .sw.shadow{background:#060a18;border:1px solid #22314a}
+  .sw.sub{background:#ffd34d;border-radius:6px}
+
+  /* --- центр --- */
+  .center{min-width:0}
+  .canvas-wrap{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px}
+  #rayCanvas{width:100%;height:600px;display:block;border-radius:8px;touch-action:none}
+  .badge{
+    position:absolute;top:20px;right:20px;max-width:330px;
+    padding:7px 12px;border-radius:9px;font-size:12.5px;line-height:1.35;
+    background:rgba(10,20,34,.88);border:1px solid var(--line);pointer-events:none;
+  }
+  .badge.ok{border-color:var(--ok);color:#c9f5d9}
+  .badge.sh{border-color:#e0564a;color:#f6d3cf}
+  .hint{color:var(--dim);font-size:12px;margin:8px 2px 0}
+
+  /* --- правая панель --- */
+  #profileCanvas{width:100%;height:380px;display:block;border-radius:8px;background:var(--panel2)}
+  #typeText{font-size:13px;color:var(--text)}
+  #typeText p{margin:9px 0}
+  #typeText .tt-title{font-weight:600;color:var(--accent);margin-bottom:2px}
+  #typeText .warn{
+    display:inline-block;margin:4px 0 2px;padding:3px 9px;border-radius:6px;
+    background:#3a1412;border:1px solid #e0564a;color:#f6c8c2;font-size:12px;
+  }
+
+  /* --- шкала шума --- */
+  .noise{margin:20px 22px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px 10px}
+  .noise h2{margin:0 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim)}
+  .nb-wrap{position:relative;height:150px;margin:6px 26px 0 10px}
+  .nb-bar{position:absolute;left:0;right:0;top:62px;height:22px;border-radius:11px;
+    background:linear-gradient(90deg,#2f9e44 0%,#94c31e 22%,#e8b30e 45%,#e8620e 70%,#d0342c 100%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+  .tick{position:absolute;top:0;height:100%;width:0}
+  .tick .stem{position:absolute;left:0;width:1px;background:rgba(255,255,255,.35)}
+  .tick .cap{position:absolute;left:0;transform:translateX(-50%);white-space:nowrap;font-size:11px;color:var(--text)}
+  .tick .cap b{color:var(--warn)}
+  footer{color:var(--dim);font-size:11.5px;padding:14px 22px 26px}
+
+  @media (max-width:1100px){
+    .layout{grid-template-columns:1fr}
+    #rayCanvas{height:460px}
+    .badge{max-width:250px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Гидрология моря — симулятор ГАС</h1>
+  <div class="sub">Как вертикальное распределение скорости звука определяет зоны освещённости и тени при поиске подводной лодки · по материалам лекции 10 «ГАС для ВМФ и для сектора ТЭК»</div>
+</header>
+
+<main class="layout">
+  <!-- ЛЕВАЯ ПАНЕЛЬ -->
+  <aside class="panel">
+    <h2>Тип гидрологии</h2>
+    <div id="types"></div>
+
+    <h2>Параметры</h2>
+    <div class="ctl">
+      <label>Глубина антенны ГАС <b id="depthVal"></b></label>
+      <input type="range" id="depthSlider" min="5" step="1">
+    </div>
+    <div class="ctl">
+      <label>Дальность схемы <b id="rangeVal"></b></label>
+      <input type="range" id="rangeSlider" min="4" max="40" step="1">
+    </div>
+    <label class="chk"><input type="checkbox" id="shadowToggle" checked> Показывать зоны тени</label>
+    <div class="note">Подкильная ГАС надводного корабля — обычно 10–30 м; буксируемую антенну можно опустить значительно глубже.</div>
+
+    <h2>Легенда</h2>
+    <div class="legend">
+      <div class="row"><div class="sw ray"></div> акустические лучи ГАС</div>
+      <div class="row"><div class="sw shadow"></div> зона тени — звук не попадает</div>
+      <div class="row"><div class="sw sub"></div> цель (ПЛ) — можно перетаскивать</div>
+    </div>
+  </aside>
+
+  <!-- ЦЕНТР -->
+  <section class="center">
+    <div class="canvas-wrap">
+      <canvas id="rayCanvas"></canvas>
+      <div id="statusBadge" class="badge ok"></div>
+    </div>
+    <div class="hint">Перетаскивайте подводную лодку мышью (или пальцем), чтобы проверять освещённость любой точки района. Переключайте типы гидрологии и глубину антенны — лучевая картина перестроится мгновенно.</div>
+  </section>
+
+  <!-- ПРАВАЯ ПАНЕЛЬ -->
+  <aside class="panel">
+    <h2>Профиль скорости звука</h2>
+    <canvas id="profileCanvas"></canvas>
+    <div id="typeText"></div>
+  </aside>
+</main>
+
+<!-- ШКАЛА ШУМА -->
+<section class="noise">
+  <h2>Шкала уровней шума — и шумность подводных лодок</h2>
+  <div class="nb-wrap" id="nbWrap">
+    <div class="nb-bar"></div>
+  </div>
+  <p style="font-size:12.5px;color:var(--dim);margin:10px 2px 12px">
+    Шумность — главный «паспорт» подводной лодки: шумят механизмы, гребные винты и вода, обтекающая корпус.
+    Снижение шумности — единственный способ противодействия шумопеленгаторным ГАС: геометрия винтов, амортизация
+    механизмов, звукопоглощающие покрытия корпуса. С 1990-х годов средняя шумность АПЛ США снижена в десять раз
+    по звуковому давлению — с 0,1 до 0,01 Па, то есть примерно на 20 дБ.
+  </p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11.5px;color:var(--dim)">
+    <span style="border:1px solid var(--line);border-radius:6px;padding:3px 9px">1960-е — резинометаллические амортизаторы, бескавитационные винты</span>
+    <span style="border:1px solid var(--line);border-radius:6px;padding:3px 9px">1970-е — малошумные насосы и вентиляторы</span>
+    <span style="border:1px solid var(--line);border-radius:6px;padding:3px 9px">1980-е — агрегатная сборка, пневмоамортизация</span>
+    <span style="border:1px solid var(--line);border-radius:6px;padding:3px 9px">1990-е — композиционные материалы, новые движители</span>
+  </div>
+</section>
+
+<footer>
+  Учебный демонстратор по материалам лекции 10. Профили скорости звука и дальности схематические; отражение звука от поверхности и дна принято идеальным, поглощение не моделируется.
+</footer>
+
+<script>
+'use strict';
+
+/* ============================ ДАННЫЕ: 7 ТИПОВ ГИДРОЛОГИИ ============================ */
+const TYPES = [
+  {
+    name:'Тип 1 — положительный градиент', tag:'холодное время года, глубоководный район',
+    H:4000, src:20, srcMax:1500, rangeKm:20,
+    knots:[[0,1480],[4000,1550]],
+    title:'Положительный градиент скорости звука',
+    text:[
+      'Скорость звука растёт с глубиной. Такая гидрология возникает, как правило, в холодное время года, когда вода перемешана и её температура мало меняется с глубиной.',
+      'Лучи изгибаются к поверхности и многократно отражаются от неё — у поверхности образуется поверхностный звуковой канал, звук уходит на десятки километров.',
+      'Для ГАС: корабль далеко «слышит» ПЛ, идущую у поверхности. Но лодке достаточно уйти глубже — под канал, где остаётся зона тени.'
+    ]
+  },
+  {
+    name:'Тип 2 — слой скачка', tag:'тёплый слой над термоклином',
+    H:500, src:20, srcMax:250, rangeKm:15,
+    knots:[[0,1483],[60,1493],[500,1461]],
+    title:'Положительный градиент сменяется отрицательным',
+    text:[
+      'После штормового перемешивания поверхностный слой охлаждён — градиент в нём положительный. На глубинах порядка десятков метров он сменяется отрицательным: это сезонный термоклин, «слой скачка».',
+      'Подкильная ГАС работает в приповерхностном канале, но ниже слоя скачка формируется зона тени.',
+      'Для ГАС: ПЛ, ушедшая под термоклин, резко снижает дальность своего обнаружения — классический тактический приём.'
+    ]
+  },
+  {
+    name:'Тип 3 — + / − / +', tag:'глубоководный район, зима или осень',
+    H:4000, src:30, srcMax:2000, rangeKm:25,
+    knots:[[0,1480],[100,1496],[1200,1468],[4000,1520]],
+    title:'Положительный градиент → отрицательный → снова положительный',
+    text:[
+      'Градиент дважды меняет знак: положительный у поверхности, отрицательный в средних слоях и снова положительный у больших глубин. Характерно для глубоководных районов Мирового океана в зимний или осенний период.',
+      'Для ГАС: картина освещённости «многослойная» — приповерхностный канал, за ним тень, а глубинные лучи на большой дистанции снова выходят к поверхности.'
+    ]
+  },
+  {
+    name:'Тип 4 — + / − / + / −', tag:'шельф, мелкое море',
+    H:160, src:10, srcMax:80, rangeKm:8,
+    knots:[[0,1490],[40,1495],[80,1489],[120,1495],[160,1489]],
+    title:'Дважды градиент меняется с положительного на отрицательный',
+    text:[
+      'Дважды происходит изменение градиента с положительного на отрицательный. Такое распределение наблюдается в мелководных районах океана, мелком море, шельфовой зоне.',
+      'Лучи многократно пересекают слои скачка и переотражаются от дна; освещённые и теневые области чередуются.',
+      'Для ГАС: поиск непредсказуем — особенно сложные условия для распространения звука и работы гидроакустики складываются именно в мелководных районах.'
+    ]
+  },
+  {
+    name:'Тип 5 — отрицательный градиент', tag:'мелководье, летнее время',
+    H:100, src:15, srcMax:50, rangeKm:8,
+    knots:[[0,1496],[100,1476]],
+    title:'Уменьшение скорости звука с глубиной',
+    warn:'Худший вариант для поиска ПЛ',
+    text:[
+      'Скорость звука убывает с глубиной — мелководный район в летнее время: верхние слои прогреты, внизу холоднее и «медленнее».',
+      'Лучи изгибаются вниз, отражаются от дна с большими потерями. Под источником формируется обширная зона тени уже на малых глубинах и относительно малой дистанции.',
+      'Для ГАС: ПЛ легко уходит вниз, подкильная станция почти бесполезна — помогают буксируемые антенны, опускаемые на бо́льшую глубину (попробуйте увеличить глубину ГАС).'
+    ]
+  },
+  {
+    name:'Тип 6 — − / + (ось ПЗК)', tag:'глубоководный океан, подводный звуковой канал',
+    H:4000, src:300, srcMax:2500, rangeKm:30,
+    knots:[[0,1512],[200,1494],[1200,1468],[4000,1521]],
+    title:'Отрицательный градиент сменяется положительным',
+    text:[
+      'Скорость звука падает до минимума, затем растёт из-за давления — классическая гидрология глубоководных районов океана. Слой минимальной скорости — ось подводного звукового канала (ПЗК).',
+      'Лучи «запираются» в канале и распространяются на сотни километров с малыми потерями; у поверхности и у дна — тень.',
+      'Для ГАС и связи: ПЗК — природная «трасса» дальнего гидроакустического обнаружения и звукоподводной связи.'
+    ]
+  },
+  {
+    name:'Тип 7 — − / + / −', tag:'мелкое море',
+    H:200, src:20, srcMax:100, rangeKm:10,
+    knots:[[0,1496],[60,1486],[130,1496],[200,1487]],
+    title:'Отрицательный градиент → положительный → вновь отрицательный',
+    text:[
+      'Отрицательный градиент сменяется положительным, а потом вновь отрицательным — возможно в районах мелкого моря. На промежуточной глубине возникает локальный звуковой канал.',
+      'Для ГАС: малые глубины и близкое дно разрушают канал; освещённость неустойчива и сильно зависит от сезона. Зоны тени возникают и у поверхности, и у дна.'
+    ]
+  }
+];
+
+/* ============================ СОСТОЯНИЕ ============================ */
+let ti = 0;                       // индекс типа гидрологии
+let srcDepth = TYPES[0].src;      // глубина антенны ГАС, м
+let rangeM   = TYPES[0].rangeKm*1000; // дальность схемы, м
+let showShadow = true;
+let sub = {x:0, z:0};
+let rays = [];                    // трассированные лучи
+const gridCols = 280, gridRows = 150;
+const visited = new Uint8Array(gridCols*gridRows);
+const overlay = document.createElement('canvas'); // сетка зон тени
+overlay.width = gridCols; overlay.height = gridRows;
+
+/* ============================ ФИЗИКА ============================ */
+function cAt(T,z){
+  const K = T.knots;
+  if(z <= K[0][0]) return K[0][1];
+  for(let i=1;i<K.length;i++){
+    if(z <= K[i][0]){
+      const dz = K[i][0]-K[i-1][0];
+      return K[i-1][1] + (K[i][1]-K[i-1][1])*(z-K[i-1][0])/dz;
+    }
+  }
+  return K[K.length-1][1];
+}
+function gradAt(T,z){
+  const K = T.knots;
+  if(z <= K[0][0]){ const a=K[0], b=K[1]; return (b[1]-a[1])/(b[0]-a[0]); }
+  for(let i=1;i<K.length;i++){
+    if(z <= K[i][0]){ const a=K[i-1], b=K[i]; return (b[1]-a[1])/(b[0]-a[0]); }
+  }
+  const a=K[K.length-2], b=K[K.length-1];
+  return (b[1]-a[1])/(b[0]-a[0]);
+}
+
+/* Трассировка лучей: инвариант Снелла p = cos(θ)/c, dθ/ds = −p·dc/dz.
+   Отражение от поверхности почти полное, от дна — с большими потерями:
+   после нескольких отскоков луч считается затухшим. */
+function trace(){
+  const T = TYPES[ti];
+  const c0 = cAt(T, srcDepth);
+  const N = 81, maxA = 78*Math.PI/180;
+  const ds = Math.max(2, rangeM/2600);
+  const cw = rangeM/gridCols, ch = T.H/gridRows;
+  const MAX_BOTTOM = 4;             // дно "съедает" луч
+  rays = [];
+  visited.fill(0);
+
+  for(let i=0;i<N;i++){
+    const u = -1 + 2*i/(N-1);
+    let th = maxA*Math.sin(u*Math.PI/2);   // лучей больше у горизонтали
+    let p = Math.cos(th)/c0;
+    let x = 0, z = srcDepth, refl = 0, bottom = 0, steps = 0, lastX = 0;
+    const maxSteps = 15000;
+    const pts = [[x,z]];
+    const mark = (xx,zz)=>{
+      const gx = Math.min(gridCols-1, Math.max(0, (xx/cw)|0));
+      const gz = Math.min(gridRows-1, Math.max(0, (zz/ch)|0));
+      visited[gz*gridCols+gx] = 1;
+    };
+    mark(0,z);
+    while(x < rangeM && steps < maxSteps && refl < 2500){
+      steps++;
+      th += -p*gradAt(T,z)*ds;
+      if(th >  Math.PI/2) th =  Math.PI/2;
+      if(th < -Math.PI/2) th = -Math.PI/2;
+      x += Math.cos(th)*ds;
+      z += Math.sin(th)*ds;
+      if(z < 0){ z = -z; th = -th; refl++; pts.push([x,0]); }
+      else if(z > T.H){
+        z = 2*T.H - z; th = -th; refl++;
+        pts.push([x,T.H]);
+        if(++bottom > MAX_BOTTOM) break;   // луч затух в грунте
+      }
+      if(steps % 3 === 0) pts.push([x,z]);
+      mark(x, z);
+      if(steps % 3000 === 0){          // луч «завис» вертикально — стоп
+        if(x - lastX < ds*20) break;
+        lastX = x;
+      }
+    }
+    pts.push([Math.min(x,rangeM), z]);
+    rays.push(pts);
+  }
+
+  // растр зон тени: непосещённые ячейки — тёмные
+  const octx = overlay.getContext('2d');
+  const img = octx.createImageData(gridCols, gridRows);
+  for(let k=0;k<gridCols*gridRows;k++){
+    const o = k*4;
+    if(!visited[k]){ img.data[o]=5; img.data[o+1]=9; img.data[o+2]=20; img.data[o+3]=210; }
+  }
+  octx.putImageData(img,0,0);
+}
+
+/* ============================ ГЕОМЕТРИЯ ХОЛСТА ============================ */
+const rayCanvas = document.getElementById('rayCanvas');
+const ml=50, mr=14, mt=12, mb=30; // поля
+let plotW=0, plotH=0;
+const X = x => ml + x/rangeM*plotW;
+const Y = z => mt + z/TYPES[ti].H*plotH;
+function fromPx(px,py){
+  return { x:(px-ml)/plotW*rangeM, z:(py-mt)/plotH*TYPES[ti].H };
+}
+
+/* ============================ ОТРИСОВКА ============================ */
+function drawShip(ctx,cx,cy){
+  ctx.fillStyle='#cfd8e3';
+  ctx.beginPath();
+  ctx.moveTo(cx-16,cy-9); ctx.lineTo(cx+11,cy-9); ctx.lineTo(cx+6,cy-2); ctx.lineTo(cx-13,cy-2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(cx-6,cy-15,9,6);
+  ctx.strokeStyle='#8fa3b8'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(cx-2,cy-15); ctx.lineTo(cx-2,cy-21); ctx.stroke();
+}
+function drawSub(ctx,cx,cy,lit){
+  ctx.save();
+  if(lit){ ctx.shadowColor='rgba(255,211,77,.85)'; ctx.shadowBlur=10; }
+  ctx.fillStyle='#ffd34d';
+  ctx.beginPath(); ctx.ellipse(cx,cy,15,5.5,0,0,Math.PI*2); ctx.fill();
+  ctx.fillRect(cx-4,cy-9,8,5);
+  ctx.strokeStyle='#ffd34d'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(cx-1,cy-9); ctx.lineTo(cx-1,cy-13); ctx.stroke();
+  ctx.restore();
+}
+function niceStep(range,maxTicks){
+  const raw = range/maxTicks;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  for(const m of [1,2,2.5,5,10]){ if(m*pow >= raw) return m*pow; }
+  return 10*pow;
+}
+function render(){
+  const T = TYPES[ti];
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = rayCanvas.clientWidth, cssH = rayCanvas.clientHeight;
+  if(cssW<10||cssH<10) return;
+  if(rayCanvas.width !== Math.round(cssW*dpr) || rayCanvas.height !== Math.round(cssH*dpr)){
+    rayCanvas.width = Math.round(cssW*dpr); rayCanvas.height = Math.round(cssH*dpr);
+  }
+  const ctx = rayCanvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  plotW = cssW-ml-mr; plotH = cssH-mt-mb;
+
+  // вода
+  const g = ctx.createLinearGradient(0,mt,0,mt+plotH);
+  g.addColorStop(0,'#1d5273'); g.addColorStop(1,'#0a1d30');
+  ctx.fillStyle=g; ctx.fillRect(0,0,cssW,cssH);
+  // зоны тени (размытый растр)
+  if(showShadow){
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(overlay, 0,0,gridCols,gridRows, ml,mt,plotW,plotH);
+  }
+  // лучи
+  ctx.strokeStyle='rgba(150,228,255,.42)'; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(const pts of rays){
+    ctx.moveTo(X(pts[0][0]), Y(pts[0][1]));
+    for(let i=1;i<pts.length;i++) ctx.lineTo(X(pts[i][0]), Y(pts[i][1]));
+  }
+  ctx.stroke();
+
+  // дно и поверхность
+  ctx.fillStyle='#33291a'; ctx.fillRect(0, Y(T.H), cssW, cssH-Y(T.H));
+  ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,Y(0)); ctx.lineTo(cssW,Y(0)); ctx.stroke();
+
+  // шкала дальности (низ)
+  ctx.fillStyle='rgba(220,232,242,.7)'; ctx.font='11px "Segoe UI",sans-serif';
+  ctx.strokeStyle='rgba(255,255,255,.22)';
+  const kmStep = niceStep(rangeM/1000, 9);
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let km=0; km<=rangeM/1000+1e-6; km+=kmStep){
+    const px = X(km*1000);
+    ctx.beginPath(); ctx.moveTo(px, mt+plotH); ctx.lineTo(px, mt+plotH+4); ctx.stroke();
+    ctx.fillText(km===rangeM/1000 ? km+' км' : km, px, mt+plotH+6);
+  }
+  // шкала глубины (слева)
+  const dStep = niceStep(T.H, 8);
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let d=0; d<=T.H+1e-6; d+=dStep){
+    const py = Y(d);
+    ctx.beginPath(); ctx.moveTo(ml-4,py); ctx.lineTo(ml,py); ctx.stroke();
+    ctx.fillText(Math.round(d), ml-7, py);
+  }
+  ctx.save();
+  ctx.translate(12, mt+plotH/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('глубина, м', 0, 0);
+  ctx.restore();
+
+  // ГАС
+  const sx = X(0), sy = Y(0);
+  drawShip(ctx, sx+2, sy);
+  ctx.strokeStyle='rgba(255,211,77,.75)'; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, Y(srcDepth)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#ffd34d';
+  ctx.beginPath(); ctx.arc(sx, Y(srcDepth), 4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(255,211,77,.95)'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText('ГАС · '+srcDepth+' м', sx+8, Y(srcDepth)-8);
+
+  // ПЛ
+  const subPx = X(sub.x), subPy = Y(sub.z);
+  const lit = isLit(sub.x, sub.z);
+  drawSub(ctx, subPx, subPy, lit);
+
+  updateStatus(lit);
+}
+function isLit(x,z){
+  const T = TYPES[ti];
+  const cw = rangeM/gridCols, ch = T.H/gridRows;
+  const gx = Math.min(gridCols-1, Math.max(0,(x/cw)|0));
+  const gz = Math.min(gridRows-1, Math.max(0,(z/ch)|0));
+  return visited[gz*gridCols+gx] === 1;
+}
+const badge = document.getElementById('statusBadge');
+function updateStatus(lit){
+  const km = (sub.x/1000).toFixed(1).replace('.',',');
+  if(lit){
+    badge.className='badge ok';
+    badge.innerHTML='✓ Цель освещена — '+km+' км · '+Math.round(sub.z)+' м.<br>Звук ГАС достигает точки, обнаружение возможно.';
+  }else{
+    badge.className='badge sh';
+    badge.innerHTML='✕ Цель в зоне тени — '+km+' км · '+Math.round(sub.z)+' м.<br>Прямых лучей нет: ПЛ не обнаруживается ГАС с этой глубины.';
+  }
+}
+
+/* ============================ ПРОФИЛЬ c(z) ============================ */
+const profCanvas = document.getElementById('profileCanvas');
+function drawProfile(){
+  const T = TYPES[ti];
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = profCanvas.clientWidth, cssH = profCanvas.clientHeight;
+  if(cssW<10) return;
+  profCanvas.width=Math.round(cssW*dpr); profCanvas.height=Math.round(cssH*dpr);
+  const ctx = profCanvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const ml2=34, mr2=10, mt2=14, mb2=38;
+  const w = cssW-ml2-mr2, h = cssH-mt2-mb2;
+  let cmin=Infinity, cmax=-Infinity;
+  for(const [,c] of T.knots){ cmin=Math.min(cmin,c); cmax=Math.max(cmax,c); }
+  cmin-=8; cmax+=8;
+  const PX = c => ml2 + (c-cmin)/(cmax-cmin)*w;
+  const PY = z => mt2 + z/T.H*h;
+
+  ctx.fillStyle='#0d1a2a'; ctx.fillRect(0,0,cssW,cssH);
+  ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.fillStyle='rgba(220,232,242,.6)'; ctx.font='10px "Segoe UI",sans-serif';
+
+  // сетка по скорости
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  const cs = niceStep(cmax-cmin,6);
+  for(let c=Math.ceil(cmin/cs)*cs; c<=cmax; c+=cs){
+    ctx.beginPath(); ctx.moveTo(PX(c),mt2); ctx.lineTo(PX(c),mt2+h); ctx.stroke();
+    ctx.fillText(c, PX(c), mt2+h+4);
+  }
+  // сетка по глубине
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  const ds = niceStep(T.H,6);
+  for(let d=0; d<=T.H+1e-6; d+=ds){
+    ctx.beginPath(); ctx.moveTo(ml2-3,PY(d)); ctx.lineTo(ml2+w,PY(d)); ctx.stroke();
+    ctx.fillText(Math.round(d), ml2-5, PY(d));
+  }
+  ctx.save(); ctx.translate(9, mt2+h/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.fillText('глубина, м',0,0); ctx.restore();
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText('скорость звука c, м/с', ml2+w/2, mt2+h+17);
+
+  // кривая профиля
+  ctx.strokeStyle='#6fd3ff'; ctx.lineWidth=2; ctx.beginPath();
+  T.knots.forEach(([z,c],i)=> i?ctx.lineTo(PX(c),PY(z)):ctx.moveTo(PX(c),PY(z)));
+  ctx.stroke();
+  ctx.fillStyle='#bfe8ff';
+  for(const [z,c] of T.knots){ ctx.beginPath(); ctx.arc(PX(c),PY(z),2.5,0,Math.PI*2); ctx.fill(); }
+
+  // ось ПЗК / слой скачка
+  for(let i=1;i<T.knots.length-1;i++){
+    const [z,c]=T.knots[i], [ ,cp]=T.knots[i-1], [ ,cn]=T.knots[i+1];
+    let label=null, col=null;
+    if(c<=cp && c<=cn){ label='ось ПЗК'; col='rgba(111,211,255,.8)'; }
+    if(c>=cp && c>=cn){ label='слой скачка'; col='rgba(255,140,90,.85)'; }
+    if(label){
+      ctx.strokeStyle=col; ctx.setLineDash([5,4]); ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(ml2,PY(z)); ctx.lineTo(ml2+w,PY(z)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle=col; ctx.textAlign='left'; ctx.textBaseline='bottom';
+      ctx.fillText(label, ml2+5, PY(z)-2);
+    }
+  }
+  // линия ГАС
+  ctx.strokeStyle='rgba(255,211,77,.9)'; ctx.setLineDash([3,3]); ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.moveTo(ml2,PY(srcDepth)); ctx.lineTo(ml2+w,PY(srcDepth)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#ffd34d'; ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillText('ГАС', ml2+5, PY(srcDepth)-2);
+}
+
+/* ============================ СПАРКЛАЙНЫ ТИПОВ ============================ */
+function drawSpark(cv, T){
+  const dpr = window.devicePixelRatio||1;
+  cv.width=56*dpr; cv.height=30*dpr;
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  let cmin=Infinity,cmax=-Infinity;
+  for(const [,c] of T.knots){cmin=Math.min(cmin,c);cmax=Math.max(cmax,c);}
+  const pad=4;
+  const PX=c=>pad+(c-cmin)/(cmax-cmin)*(56-2*pad);
+  const PY=z=>pad+z/T.H*(30-2*pad);
+  ctx.strokeStyle='rgba(255,255,255,.2)';ctx.strokeRect(.5,.5,55,29);
+  ctx.strokeStyle='#9fd8ff'; ctx.lineWidth=1.6; ctx.beginPath();
+  T.knots.forEach(([z,c],i)=> i?ctx.lineTo(PX(c),PY(z)):ctx.moveTo(PX(c),PY(z)));
+  ctx.stroke();
+}
+
+/* ============================ ИНТЕРФЕЙС ============================ */
+const typesBox = document.getElementById('types');
+TYPES.forEach((T,i)=>{
+  const b=document.createElement('button');
+  b.className='type-btn'+(i===ti?' active':'');
+  const spark=document.createElement('canvas');
+  const tx=document.createElement('div');
+  tx.innerHTML='<div class="t-name">'+T.name+'</div><div class="t-tag">'+T.tag+'</div>';
+  b.appendChild(spark); b.appendChild(tx);
+  b.addEventListener('click',()=>selectType(i));
+  typesBox.appendChild(b);
+  drawSpark(spark,T);
+});
+
+const depthSlider=document.getElementById('depthSlider'),
+      rangeSlider=document.getElementById('rangeSlider'),
+      depthVal=document.getElementById('depthVal'),
+      rangeVal=document.getElementById('rangeVal'),
+      shadowToggle=document.getElementById('shadowToggle');
+
+function syncControls(){
+  const T=TYPES[ti];
+  depthSlider.max=T.srcMax;
+  depthSlider.value=srcDepth;
+  rangeSlider.value=Math.round(rangeM/1000);
+  depthVal.textContent=srcDepth+' м';
+  rangeVal.textContent=Math.round(rangeM/1000)+' км';
+}
+function selectType(i){
+  ti=i; const T=TYPES[ti];
+  srcDepth=T.src; rangeM=T.rangeKm*1000;
+  sub.x=rangeM*0.45; sub.z=Math.min(T.H*0.5, T.H-6);
+  document.querySelectorAll('.type-btn').forEach((b,k)=>b.classList.toggle('active',k===i));
+  document.getElementById('typeText').innerHTML=
+    '<div class="tt-title">'+T.title+'</div>'+
+    (T.warn?'<div class="warn">⚠ '+T.warn+'</div>':'')+
+    T.text.map(p=>'<p>'+p+'</p>').join('');
+  syncControls(); recompute();
+}
+let rafPending=false;
+function recompute(){
+  if(rafPending) return;
+  rafPending=true;
+  requestAnimationFrame(()=>{ rafPending=false; trace(); render(); drawProfile(); });
+}
+depthSlider.addEventListener('input',()=>{ srcDepth=+depthSlider.value; syncControls(); recompute(); });
+rangeSlider.addEventListener('input',()=>{ rangeM=+rangeSlider.value*1000; sub.x=Math.min(sub.x,rangeM*0.98); syncControls(); recompute(); });
+shadowToggle.addEventListener('change',()=>{ showShadow=shadowToggle.checked; render(); });
+
+/* перетаскивание ПЛ */
+let dragging=false;
+function subPx(){ return {x:X(sub.x), y:Y(sub.z)}; }
+function evPos(e){                      // позиция курсора в координатах канваса
+  const r = rayCanvas.getBoundingClientRect();
+  return { px: e.clientX - r.left, py: e.clientY - r.top };
+}
+rayCanvas.addEventListener('pointerdown',e=>{
+  const {px,py}=evPos(e), sp=subPx();
+  if(Math.hypot(px-sp.x,py-sp.y)<26){ dragging=true; rayCanvas.setPointerCapture(e.pointerId); }
+});
+rayCanvas.addEventListener('pointermove',e=>{
+  const T=TYPES[ti];
+  const {px,py}=evPos(e);
+  if(dragging){
+    const w=fromPx(px,py);
+    sub.x=Math.min(rangeM*0.99, Math.max(60, w.x));
+    sub.z=Math.min(T.H-4, Math.max(4, w.z));
+    render();
+  }else{
+    const sp=subPx();
+    rayCanvas.style.cursor = Math.hypot(px-sp.x,py-sp.y)<26 ? 'grab' : 'default';
+  }
+});
+rayCanvas.addEventListener('pointerup',()=>dragging=false);
+
+/* шкала шума */
+const NOISE=[
+  [10,'шёпот','up'],
+  [20,'норма шума в жилых помещениях','down'],
+  [40,'тихий разговор','up'],
+  [80,'шум двигателя грузовика','down'],
+  [100,'автомобильный гудок · <b>шумность первых АПЛ</b>','up'],
+  [120,'порог болевого ощущения','down'],
+  [150,'взлёт самолёта','up']
+];
+const nbWrap=document.getElementById('nbWrap');
+NOISE.forEach(([v,label,pos])=>{
+  const t=document.createElement('div');
+  t.className='tick'; t.style.left=(v/160*100)+'%';
+  t.innerHTML='<div class="stem" style="'+(pos==='up'?'top:44px;height:18px':'top:84px;height:18px')+'"></div>'+
+    '<div class="cap" style="'+(pos==='up'?'top:16px':'top:104px')+'">'+label+'<div style="color:#8fa3b8">'+v+' дБ</div></div>';
+  nbWrap.appendChild(t);
+});
+
+/* ============================ СТАРТ ============================ */
+window.addEventListener('resize',()=>{ render(); drawProfile(); });
+selectType(0);
+</script>
+</body>
+</html>

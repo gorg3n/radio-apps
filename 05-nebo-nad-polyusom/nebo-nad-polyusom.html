@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Небо над полюсом — симулятор орбитальных группировок</title>
+<style>
+  :root{
+    --bg:#eef3f8; --panel:#ffffff; --line:#d7e1ec; --text:#1d3040; --dim:#5d7183;
+    --accent:#0e6ba8; --accent2:#e07a2f; --soft:#f6f9fc; --ok:#2fae64; --bad:#e0564a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:15px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+  header{padding:20px 18px 4px;max-width:1300px;margin:0 auto}
+  header h1{margin:0;font-size:24px;font-weight:650}
+  header .sub{color:var(--dim);margin-top:4px;font-size:13.5px}
+  .wrap{max-width:1300px;margin:0 auto}
+  .layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px;padding:0 18px 10px;align-items:start}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 4px rgba(20,45,70,.07);padding:14px 16px}
+  .panel h2{margin:2px 0 8px;font-size:12.5px;text-transform:uppercase;letter-spacing:.9px;color:var(--dim)}
+  .panel h2:not(:first-child){margin-top:14px}
+
+  .question{border:1px solid #7a6420;background:#fdf6ee;border-radius:10px;padding:10px 12px;margin-bottom:6px}
+  .question .q-tag{color:#b07f1e;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700}
+  .question .q-text{font-size:13px;margin-top:3px;line-height:1.45}
+  .desc{font-size:12.5px;color:var(--dim);margin:6px 0 2px;line-height:1.5}
+
+  .btn-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .m-btn{
+    display:block;width:100%;text-align:left;cursor:pointer;margin-bottom:6px;
+    background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:7px 11px;
+    color:var(--text);font-size:13px;font-weight:600;
+  }
+  .m-btn small{display:block;font-weight:400;color:var(--dim);font-size:11.5px}
+  .m-btn:hover{border-color:#9fc2da}
+  .m-btn.active{border-color:var(--accent);background:#e7f1f8;color:var(--accent)}
+  .btn{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:6px 11px;color:var(--text);cursor:pointer;font-size:12.5px}
+  .btn:hover{border-color:#9fc2da}
+  .btn.active{border-color:var(--accent);color:var(--accent);background:#e7f1f8}
+  .ctl{margin:10px 0}
+  .ctl label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .ctl label b{color:var(--accent);font-weight:600}
+  input[type=range]{width:100%;accent-color:#0e6ba8}
+
+  .readout{margin:8px 0;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--soft);font-size:12.5px;line-height:1.55}
+  .readout b{color:var(--accent)}
+  .gauge{margin:10px 0 4px}
+  .gauge .g-lab{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px}
+  .gauge .g-lab b{color:var(--accent2)}
+  .gauge .g-bar{height:14px;border-radius:7px;background:#e6edf4;border:1px solid var(--line);overflow:hidden}
+  .gauge .g-fill{height:100%;background:linear-gradient(90deg,#7fc0e8,#e07a2f);transition:width .3s}
+  .note{font-size:12px;color:var(--dim);line-height:1.5}
+  .note b{color:var(--text)}
+
+  .canvas-wrap{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 4px rgba(20,45,70,.07);padding:10px;min-width:0}
+  #map{width:100%;height:660px;display:block;border-radius:10px}
+  footer{color:var(--dim);font-size:11.5px;padding:12px 18px 26px;max-width:1300px;margin:0 auto}
+  @media (max-width:1000px){ .layout{grid-template-columns:1fr} #map{height:480px} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Небо над полюсом</h1>
+  <div class="sub">Симулятор орбитальных группировок: почему спутники СПРН летали по «Молниям», сколько их нужно для круглосуточного наблюдения и когда подлодка в океане получит приказ · по материалам лекций 5, 6 и 8</div>
+</header>
+
+<div class="wrap">
+<main class="layout">
+  <aside class="panel">
+    <div id="qbox" class="question"></div>
+    <div id="desc" class="desc"></div>
+
+    <h2>Миссия</h2>
+    <div id="missions"></div>
+
+    <h2>Управление</h2>
+    <div class="btn-row">
+      <button class="btn" id="playBtn">⏸ пауза</button>
+      <button class="btn" id="resetBtn">⟲ сброс</button>
+    </div>
+    <div class="ctl">
+      <label>Скорость времени <b id="spdVal"></b></label>
+      <input type="range" id="spdSlider" min="30" max="40000" step="10">
+    </div>
+    <div id="geoCtl" style="display:none">
+      <div class="ctl">
+        <label>Долгота стояния <b id="lonVal"></b></label>
+        <input type="range" id="lonSlider" min="-180" max="180" step="2">
+      </div>
+    </div>
+    <div id="apCtl" style="display:none">
+      <div class="ctl">
+        <label><span id="apLab">Долгота апогея «Молний»</span> <b id="apVal"></b></label>
+        <input type="range" id="apSlider" min="-170" max="170" step="5">
+      </div>
+    </div>
+    <div id="satCtl" style="display:none">
+      <div class="btn-row">
+        <button class="btn" id="addBtn">+ спутник</button>
+        <button class="btn" id="delBtn">− спутник</button>
+      </div>
+      <div class="note">Апогеи разнесены равномерно: добавьте аппараты и следите за шкалой покрытия района.</div>
+    </div>
+    <div id="relayCtl" style="display:none">
+      <div class="ctl">
+        <label>Тип ретранслятора</label>
+        <div class="btn-row">
+          <button class="btn relay-type" data-t="geo">Геостационар</button>
+          <button class="btn relay-type" data-t="molniya">«Молния»</button>
+          <button class="btn relay-type" data-t="leo">Низкая орбита</button>
+        </div>
+      </div>
+      <div class="note">Кликните по карте — перенесёте подлодку. Сеанс связи открыт, когда и пункт управления, и лодка в зоне радиовидения.</div>
+    </div>
+
+    <h2>Что происходит</h2>
+    <div id="gaugeBox"></div>
+    <div id="readout" class="readout"></div>
+
+    <h2>Итог</h2>
+    <div id="summary" class="note"></div>
+  </aside>
+
+  <section class="canvas-wrap">
+    <canvas id="map"></canvas>
+  </section>
+</main>
+</div>
+
+<footer>
+  Учебный демонстратор по материалам лекций 5, 6 и 8. Орбиты считаются по законам Кеплера (период — по третьему
+  закону, уравнение Кеплера решается численно). Зона радиовидения показана с практическим углом места:
+  для наблюдения 25–30°, для связи 5°, для низкой орбиты 10° — поэтому она меньше геометрического горизонта.
+</footer>
+
+<script>
+'use strict';
+
+/* ============================ КОНСТАНТЫ И МЕХАНИКА ============================ */
+const R=6371, MU=398600, WE=2*Math.PI/86164;      // км, км³/с², вращение Земли
+const D2R=Math.PI/180, R2D=180/Math.PI;
+// практический угол места: наблюдение требует высокого спутника над горизонтом, связь — нет
+let ELEV=25*D2R;
+function periodH(h){ return 2*Math.PI*Math.sqrt(Math.pow(R+h,3)/MU); }   // с
+function rhoFor(h){ return Math.acos(R*Math.cos(ELEV)/(R+h))-ELEV; }      // центр. угол зоны видимости
+function normLon(l){ l=((l+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI); return l-Math.PI; }
+function angDist(p1,l1,p2,l2){
+  return Math.acos(Math.min(1, Math.sin(p1)*Math.sin(p2)+Math.cos(p1)*Math.cos(p2)*Math.cos(l1-l2)));
+}
+
+function molniya(name,color,{phase=Math.PI, apogeeLon=90}={}){
+  const T=43199.7;                                        // 12 ч
+  const a=Math.pow(MU*Math.pow(T/(2*Math.PI),2),1/3);     // ≈26 600 км
+  const e=0.74;
+  return {kind:'molniya', name, color, T, a, e, i:63.4*D2R,
+    omega:-Math.PI/2, phase, raan0:apogeeLon*D2R-Math.PI/2,
+    hAp:Math.round(a*(1+e)-R), hPer:Math.round(a*(1-e)-R), rho:0};
+}
+function geo(name,color,{lonDeg=-24}={}){
+  const h=35786;
+  return {kind:'geo', name, color, T:86164, h, lonDeg, rho:0};
+}
+function leo(name,color){
+  const h=420;
+  const a=R+h;
+  const s={kind:'leo', name, color, T:periodH(h), a, e:0, i:65*D2R, omega:0,
+    phase:52.5*D2R, raan0:34.2*D2R, rho:0};   // детерминированный пролёт над космодромом
+  return s;
+}
+
+/* состояние спутника в момент t (с) */
+function satState(s,t){
+  if(s.kind==='geo') return {phi:0, lam:s.lonDeg*D2R, h:s.h, rho:rhoFor(s.h)};
+  const n=2*Math.PI/s.T;
+  let M=(s.phase+n*t)%(2*Math.PI);
+  let E=M;
+  for(let k=0;k<7;k++) E-=(E-s.e*Math.sin(E)-M)/(1-s.e*Math.cos(E));
+  const nu=2*Math.atan2(Math.sqrt(1+s.e)*Math.sin(E/2), Math.sqrt(1-s.e)*Math.cos(E/2));
+  const r=s.a*(1-s.e*Math.cos(E));
+  const h=r-R, u=s.omega+nu;
+  const phi=Math.asin(Math.sin(s.i)*Math.sin(u));
+  const lam=normLon(Math.atan2(Math.cos(s.i)*Math.sin(u), Math.cos(u))+s.raan0-WE*t);
+  return {phi, lam, h, rho:rhoFor(h)};
+}
+function covers(st,pT,lT){ return angDist(st.phi,st.lam,pT,lT)<=st.rho; }
+
+/* раскладка группировки: апогеи равномерно по суткам И по долготе
+   (как у «Око»: апогеи над Атлантикой и Тихим океаном) */
+function relayoutGroup(){
+  const N=st.sats.length;
+  if(!N) return;
+  const n=2*Math.PI/st.sats[0].T;
+  st.sats.forEach((s,k)=>{
+    const tk=k*24/N;                          // час суток, когда апогей над районом
+    s.phase=(Math.PI - n*tk*3600)%(2*Math.PI);
+    s.raan0=(st.groupLon + 15.041*tk - 90)*D2R;   // долгота апогея в этот час
+  });
+}
+
+/* ============================ ЦЕЛИ И КАРТА ============================ */
+const TARGET_US={phi:40*D2R, lam:-98*D2R, label:'район наблюдения (США)'};
+const TARGET_RU={phi:57*D2R, lam:60*D2R,  label:'район наблюдения'};
+const TARGET_KOS={phi:46*D2R, lam:63*D2R, label:'космодром'};
+const PU={phi:55.8*D2R, lam:37.6*D2R, label:'пункт управления (под Москвой)'};
+const PL={phi:45*D2R,  lam:-40*D2R,  label:'подлодка в Атлантике'};
+
+const LAND=[
+  [[-166,68],[-160,71],[-140,70],[-125,70],[-110,73],[-95,74],[-80,73],[-70,62],[-56,52],[-60,47],[-67,45],[-70,42],[-75,35],[-81,31],[-80,25],[-84,30],[-90,29],[-95,27],[-97,22],[-92,17],[-86,15],[-83,9],[-92,15],[-105,20],[-110,23],[-117,33],[-124,40],[-124,48],[-130,55],[-140,60],[-152,60],[-166,55]],
+  [[-45,60],[-42,62],[-38,66],[-22,70],[-20,77],[-30,83],[-55,82],[-62,75],[-53,66]],
+  [[-80,9],[-76,8],[-72,11],[-64,10],[-60,8],[-52,5],[-50,0],[-44,-3],[-35,-6],[-38,-13],[-40,-22],[-48,-26],[-54,-34],[-58,-39],[-65,-41],[-71,-45],[-74,-50],[-72,-54],[-68,-55],[-65,-50],[-62,-42],[-58,-35],[-54,-30],[-50,-23],[-44,-18],[-40,-13],[-50,-5],[-60,0],[-70,4],[-77,7]],
+  [[-9,43],[-9,37],[0,36],[10,37],[15,40],[23,36],[30,31],[34,28],[48,29],[57,25],[60,25],[67,24],[72,20],[77,8],[80,10],[87,21],[92,22],[95,16],[98,8],[102,2],[104,1],[110,3],[107,10],[110,15],[109,18],[112,22],[117,23],[121,30],[122,37],[126,40],[129,42],[135,44],[140,48],[142,53],[150,59],[160,60],[170,66],[179,66],[179,71],[170,73],[160,73],[150,75],[140,76],[130,74],[110,77],[90,76],[75,73],[60,71],[55,68],[40,68],[33,70],[28,71],[20,70],[15,68],[12,65],[10,60],[8,58],[5,62],[5,55],[0,51],[-5,50]],
+  [[-6,35],[3,37],[10,37],[20,32],[32,31],[43,12],[51,12],[43,0],[40,-12],[35,-22],[28,-33],[20,-35],[15,-28],[12,-18],[9,-2],[0,4],[-8,4],[-17,12],[-17,21],[-10,30]],
+  [[113,-22],[122,-18],[130,-12],[137,-12],[142,-11],[146,-19],[151,-25],[153,-29],[149,-38],[140,-38],[131,-32],[124,-34],[115,-35],[113,-26]],
+  [[127,42],[130,43],[135,46],[140,52],[135,55],[130,52],[128,48],[125,44]]
+];
+
+/* ============================ МИССИИ ============================ */
+const st={
+  mission:'molniya', t:0, playing:true, speed:1800,
+  sats:[], hours:0, hoursPair:0,
+  apogeeLon:90, groupLon:-98, geoLon:-24, relayType:'molniya'
+};
+
+const MISSIONS={
+  geo:{
+    tab:'Геостационарный «Око-С»',
+    q:'Почему спутник «висит на месте» — и что с этого получают полюса?',
+    desc:'Геостационарная орбита: период равен суткам, спутник неподвижен над точкой экватора. Зона радиовидения — почти полземля, но полюса не видны никогда.',
+    summary:'<b>Принцип:</b> высота 35 786 км, период 23 ч 56 мин — аппарат «стоит» над долготой стояния.<br>'+
+      '<b>Из курса:</b> УС-КС («Око-С») — на геостационарной орбите в точке 24° з.д., наблюдал центральную часть США (лекция 8). ИНМАРСАТ обслуживает районы примерно до 70° широты (лекция 5).<br>'+
+      '<b>Слабое место:</b> полярные районы (A4 по ГМССБ) геостационаром не обслуживаются.',
+    target:TARGET_US, target2:null,
+    make(){ ELEV=0; st.sats=[geo('КА-ГО', '#e07a2f', {lonDeg:st.geoLon})]; st.speed=1; }
+  },
+  molniya:{
+    tab:'«Молния»',
+    q:'Апогей — над Северным полушарием, перигей — над южным. Почему аппарат «висит» над нашим районом по 6 часов, а над южным полушарием пролетает мгновенно?',
+    desc:'Высокоэллиптическая орбита: апогей 39 900 км, перигей 550 км, наклонение 63,4°. У апогея скорость мала — спутник «зависает», у перигея проносится. Период — 12 часов, за сутки два витка.',
+    summary:'<b>Принцип:</b> у апогея линейная скорость в разы меньше, чем у перигея (второй закон Кеплера) — спутник долго над северным районом.<br>'+
+      '<b>Из курса:</b> «Око» — четыре КА на высокоэллиптических орбитах, каждый видит ракетоопасный район ≈6 ч в сутки; апогеи над Атлантикой и Тихим океаном, наблюдение «с края диска Земли» на фоне космоса (лекция 8).<br>'+
+      '<b>Наклонение 63,4°</b> — критическое: перигей не поворачивается, апогей всегда над севером.',
+    target:TARGET_RU, target2:null,
+    make(){ ELEV=25*D2R; st.sats=[molniya('КА-М1','#0e6ba8',{apogeeLon:st.apogeeLon})]; st.speed=1800; }
+  },
+  group:{
+    tab:'Группировка «Око»',
+    q:'Каждый аппарат видит район ≈6 часов в сутки. Сколько спутников поставить и как разнести апогеи, чтобы район наблюдался круглосуточно?',
+    desc:'Конструктор группировки: добавляйте аппараты на «Молнии» — их апогеи разнесены равномерно. Шкала показывает, сколько часов в сутки район (США) под наблюдением.',
+    summary:'<b>Из курса:</b> для круглосуточного наблюдения нужно не менее четырёх КА, штатно группировка состояла из девяти (лекция 8).<br>'+
+      '<b>В модели:</b> два аппарата оставляют дыры ≈2 часа, три закрывают сутки впритык, четвёртый — уже резерв.<br>'+
+      '<b>Наблюдение:</b> с апогея район виден «на краю диска Земли» на фоне космоса — так снижали засветку от облаков и солнечных бликов.',
+    target:TARGET_US, target2:null,
+    make(){
+      ELEV=30*D2R;
+      st.sats=[molniya('КА-М1','#0e6ba8'), molniya('КА-М2','#5aa9d6')];
+      relayoutGroup();
+      st.speed=1800;
+    }
+  },
+  leo:{
+    tab:'Низкая орбита',
+    q:'Спутник на низкой орбите — сколько минут он над целью? Почему разведка с НОО «кадровая»?',
+    desc:'Высота 420 км, виток ≈93 минуты, зона видимости — круг радиусом ~2200 км. За сутки подспутниковые точки смещаются — трассы не повторяются.',
+    summary:'<b>Из курса:</b> траектории НОО не повторяются — «что-нибудь да должно сработать»: комплекс средств поиска, где НОО — лишь один из датчиков (лекция 6).<br>'+
+      '<b>Связь:</b> сеанс с наземным пунктом — десятки минут, дальше нужна межспутниковая ретрансляция.',
+    target:TARGET_KOS, target2:null,
+    make(){ ELEV=10*D2R; st.sats=[leo('КА-НОО','#2fae64')]; st.speed=300; }
+  },
+  relay:{
+    tab:'Ретранслятор для ПЛ',
+    q:'Когда подлодка в Атлантике получит приказ из-под воды — и почему её сеансы по расписанию?',
+    desc:'Ретранслятор работает, только когда И пункт управления, И лодка в его зоне радиовидения. Переключайте тип спутника и смотрите, как меняются сеансы.',
+    summary:'<b>Из курса:</b> «спутниковая подсистема обмена информацией с подводными лодками» SSIXS — часть UHF SATCOM на геостационарных аппаратах: сеанс круглосуточный (лекция 6).<br>'+
+      '<b>«Молния»</b> даёт окна у апогея; НОО — короткие сеансы на пролёте.<br>'+
+      '<b>Кликните по карте</b> — перенесёте лодку.',
+    target:PU, target2:PL,
+    make(){
+      ELEV=5*D2R;
+      const type=st.relayType;
+      st.sats=[ type==='geo' ? geo('РТР-ГО','#e07a2f',{lonDeg:st.geoLon})
+              : type==='molniya' ? molniya('РТР-М','#0e6ba8',{apogeeLon:st.apogeeLon===90?-30:st.apogeeLon})
+              : leo('РТР-НОО','#2fae64') ];
+      st.speed= type==='leo'?300:1800;
+    }
+  }
+};
+
+/* ============================ ВЫЧИСЛЕНИЯ ПОКРЫТИЯ ============================ */
+function computeHours(){
+  const M=MISSIONS[st.mission];
+  let minutes=0, minutesPair=0;
+  for(let m=0;m<1440;m++){
+    const t=st.t+m*60;
+    const states=st.sats.map(s=>satState(s,t));
+    const c1=states.some(s=>covers(s,M.target.phi,M.target.lam));
+    if(c1) minutes++;
+    if(M.target2){
+      const c2=states.some(s=>covers(s,M.target2.phi,M.target2.lam));
+      if(c1&&c2) minutesPair++;
+    }
+  }
+  st.hours=minutes/60;
+  st.hoursPair=minutesPair/60;
+}
+
+/* ============================ КАНВАС ============================ */
+const cv=document.getElementById('map');
+const g=cv.getContext('2d');
+let W=0,H=0,DPR=1;
+function fit(){
+  DPR=window.devicePixelRatio||1;
+  const w=cv.clientWidth,h=cv.clientHeight;
+  if(w<10||h<10) return false;
+  if(cv.width!==Math.round(w*DPR)||cv.height!==Math.round(h*DPR)){ cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR); }
+  g.setTransform(DPR,0,0,DPR,0,0);
+  W=w;H=h;
+  return true;
+}
+function px(lamDeg){ return (lamDeg+180)/360*W; }
+function py(phiDeg){ return (90-phiDeg)/180*H; }
+
+function drawMapBase(){
+  // океан
+  const oc=g.createLinearGradient(0,0,0,H);
+  oc.addColorStop(0,'#dcebf5'); oc.addColorStop(1,'#cfe2ef');
+  g.fillStyle=oc; g.fillRect(0,0,W,H);
+  // сетка
+  g.strokeStyle='rgba(29,48,64,.08)'; g.lineWidth=1;
+  for(let lon=-180;lon<=180;lon+=30){ g.beginPath(); g.moveTo(px(lon),0); g.lineTo(px(lon),H); g.stroke(); }
+  for(let lat=-90;lat<=90;lat+=30){ g.beginPath(); g.moveTo(0,py(lat)); g.lineTo(W,py(lat)); g.stroke(); }
+  g.strokeStyle='rgba(29,48,64,.25)';
+  g.beginPath(); g.moveTo(0,py(0)); g.lineTo(W,py(0)); g.stroke();   // экватор
+  // континенты
+  g.fillStyle='#e9f1e7'; g.strokeStyle='#b9cfc0'; g.lineWidth=1;
+  for(const poly of LAND){
+    g.beginPath();
+    poly.forEach(([lo,la],i)=>{ const X=px(lo),Y=py(la); i?g.lineTo(X,Y):g.moveTo(X,Y); });
+    g.closePath(); g.fill(); g.stroke();
+  }
+  // зоны
+  g.fillStyle='rgba(224,86,74,.16)'; g.strokeStyle='rgba(224,86,74,.55)';
+  g.beginPath();
+  [[-124,48],[-104,49],[-88,49],[-70,45],[-75,35],[-81,30],[-90,29],[-97,26],[-104,30],[-114,32],[-124,40]]
+    .forEach(([lo,la],i)=>{ const X=px(lo),Y=py(la); i?g.lineTo(X,Y):g.moveTo(X,Y); });
+  g.closePath(); g.fill(); g.stroke();
+  g.fillStyle='rgba(47,174,100,.14)'; g.strokeStyle='rgba(47,174,100,.5)';
+  g.beginPath();
+  [[28,55],[32,60],[40,68],[60,71],[85,76],[110,77],[135,75],[160,72],[179,69],[179,62],[160,60],[145,56],[135,48],[120,50],[98,52],[85,50],[70,54],[60,52],[48,50],[38,50],[30,52]]
+    .forEach(([lo,la],i)=>{ const X=px(lo),Y=py(la); i?g.lineTo(X,Y):g.moveTo(X,Y); });
+  g.closePath(); g.fill(); g.stroke();
+  g.font='11px "Segoe UI"'; g.fillStyle='rgba(160,60,50,.85)'; g.textAlign='center';
+  g.fillText('ракетоопасный район', px(-97), py(39));
+  g.fillStyle='rgba(30,120,70,.85)';
+  g.fillText('наша территория', px(95), py(63));
+}
+function drawGroundTrack(s,t){
+  g.strokeStyle=hexA(s.color,.4); g.setLineDash([3,4]); g.lineWidth=1.2;
+  g.beginPath();
+  const span = s.kind==='leo' ? 3*s.T : 2*s.T;
+  const N=160;
+  for(let k=0;k<=N;k++){
+    const st2=satState(s, t-span+span*k/N);
+    const X=px(st2.lam*R2D), Y=py(st2.phi*R2D);
+    k?g.lineTo(X,Y):g.moveTo(X,Y);
+  }
+  g.stroke(); g.setLineDash([]); g.lineWidth=1;
+}
+function drawCoverage(s2){
+  const rhoD=s2.rho*R2D, phiD=s2.phi*R2D, lamD=s2.lam*R2D;
+  const cy=py(phiD);
+  const ry=rhoD*H/180;
+  let dx;
+  if(Math.abs(phiD)+rhoD>=90) dx=W;      // зона накрывает полюс — вся долгота
+  else dx=Math.asin(Math.min(1,Math.sin(s2.rho)/Math.cos(s2.phi)))*R2D*W/360;
+  const cx=px(lamD);
+  g.fillStyle='rgba(14,107,168,.10)'; g.strokeStyle='rgba(14,107,168,.45)';
+  g.beginPath();
+  g.ellipse(cx,cy,dx,ry,0,0,Math.PI*2);
+  g.fill(); g.stroke();
+}
+function hexA(hex,a){
+  const r=parseInt(hex.slice(1,3),16), gg=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${gg},${b},${a})`;
+}
+function drawSat(s,stt,t){
+  const X=px(stt.lam*R2D), Y=py(stt.phi*R2D);
+  // спутник: корпус + панели
+  g.fillStyle=s.color;
+  g.beginPath(); g.arc(X,Y,4.5,0,7); g.fill();
+  g.strokeStyle=hexA(s.color,.8); g.lineWidth=1.5;
+  g.beginPath(); g.moveTo(X-12,Y); g.lineTo(X-5,Y); g.moveTo(X+5,Y); g.lineTo(X+12,Y); g.stroke();
+  g.strokeRect(X-12,Y-2.5,7,5); g.strokeRect(X+5,Y-2.5,7,5);
+  g.lineWidth=1;
+  g.font='600 11px "Segoe UI"'; g.fillStyle='#2b3f52'; g.textAlign='center';
+  g.fillText(s.name,X,Y-10);
+}
+function drawTarget(tg,col,label){
+  const X=px(tg.lam*R2D), Y=py(tg.phi*R2D);
+  g.fillStyle=col;
+  g.beginPath(); g.arc(X,Y,4,0,7); g.fill();
+  g.strokeStyle='#fff'; g.lineWidth=1.5; g.stroke(); g.lineWidth=1;
+  g.font='600 11px "Segoe UI"'; g.textAlign='center'; g.fillStyle='#2b3f52';
+  g.fillText(label,X,Y+16);
+}
+
+let clickHint='';
+function draw(t){
+  if(!fit()) return;
+  const M=MISSIONS[st.mission];
+  drawMapBase();
+
+  // спутники: трассы, зоны, маркеры
+  const states=st.sats.map(s=>satState(s,st.t));
+  st.sats.forEach((s,i)=>drawGroundTrack(s,st.t));
+  states.forEach(s2=>drawCoverage(s2));
+  st.sats.forEach((s,i)=>drawSat(s,states[i],st.t));
+
+  // цели
+  if(M.target2){
+    drawTarget(M.target,'#e07a2f','ПУ: '+Math.round(M.target.phi*R2D)+'°N '+Math.round(M.target.lam*R2D)+'°E');
+    drawTarget(M.target2,'#0e6ba8','ПЛ: '+Math.round(M.target2.phi*R2D)+'°N '+Math.round(M.target2.lam*R2D)+'°E');
+    // сеанс: лучи через спутник, когда оба видны
+    const c1=states.some(s=>covers(s,M.target.phi,M.target.lam));
+    const c2=states.some(s=>covers(s,M.target2.phi,M.target2.lam));
+    if(c1&&c2){
+      states.forEach(s2=>{
+        g.strokeStyle='rgba(47,174,100,.85)'; g.setLineDash([6,5]); g.lineWidth=2;
+        g.beginPath();
+        g.moveTo(px(M.target.lam*R2D),py(M.target.phi*R2D));
+        g.quadraticCurveTo(px(s2.lam*R2D),py(s2.phi*R2D)-60, px(M.target2.lam*R2D),py(M.target2.phi*R2D));
+        g.stroke(); g.setLineDash([]); g.lineWidth=1;
+      });
+      g.fillStyle='#2fae64'; g.font='600 12px "Segoe UI"'; g.textAlign='center';
+      g.fillText('СЕАНС СВЯЗИ ОТКРЫТ', W/2, 20);
+    } else {
+      g.fillStyle='#e0564a'; g.font='600 12px "Segoe UI"'; g.textAlign='center';
+      g.fillText('сеанса нет: '+(!c1?'ПУ вне зоны':'')+(!c1&&!c2?' и ':'')+(!c2?'лодка вне зоны':''), W/2, 20);
+    }
+  } else {
+    drawTarget(M.target,'#e07a2f',M.target.label);
+    // подсветка: кто видит цель
+    states.forEach((s2,i)=>{
+      if(covers(s2,M.target.phi,M.target.lam)){
+        g.strokeStyle='rgba(224,122,47,.8)'; g.setLineDash([5,4]); g.lineWidth=1.6;
+        g.beginPath();
+        g.moveTo(px(s2.lam*R2D),py(s2.phi*R2D));
+        g.lineTo(px(M.target.lam*R2D),py(M.target.phi*R2D));
+        g.stroke(); g.setLineDash([]); g.lineWidth=1;
+      }
+    });
+  }
+
+  // служебная строка
+  g.fillStyle='rgba(29,48,64,.65)'; g.font='11.5px "Segoe UI"'; g.textAlign='left';
+  const hrs=Math.floor((st.t/3600)%24), min=Math.floor((st.t/60)%60);
+  g.fillText('время миссии: '+String(hrs).padStart(2,'0')+':'+String(min).padStart(2,'0')+' · скорость ×'+st.speed, 12, H-12);
+  if(clickHint){ g.textAlign='right'; g.fillStyle='rgba(14,107,168,.85)'; g.fillText(clickHint, W-12, H-12); }
+
+  updateReadout(states);
+}
+
+/* ============================ ПАНЕЛИ ============================ */
+const qbox=document.getElementById('qbox'), desc=document.getElementById('desc'),
+      summary=document.getElementById('summary'), readout=document.getElementById('readout'),
+      gaugeBox=document.getElementById('gaugeBox');
+
+function updateReadout(states){
+  const M=MISSIONS[st.mission];
+  let lines='';
+  st.sats.forEach((s,i)=>{
+    const s2=states[i];
+    const seesT=covers(s2,M.target.phi,M.target.lam);
+    const seesPair=M.target2?covers(s2,M.target2.phi,M.target2.lam):null;
+    let extra='';
+    if(s.kind==='geo') extra=' — стоит над '+Math.round(s.lonDeg)+'°';
+    else extra=' · апогей '+fmtKm(s.hAp)+', перигей '+fmtKm(s.hPer)+', T='+Math.round(s.T/60)+' мин';
+    lines+='<div><b>'+s.name+'</b>: '+Math.round(s2.phi*R2D)+'°'+(s2.phi>=0?'N':'S')+', '+
+      Math.round(s2.lam*R2D)+'°'+(s2.lam>=0?'E':'W')+', h '+fmtKm(s2.h)+extra+'<br>'+
+      (M.target2
+        ? 'ПУ: '+(seesT?'<b style="color:#2fae64">в зоне</b>':'вне зоны')+' · ПЛ: '+(seesPair?'<b style="color:#2fae64">в зоне</b>':'вне зоны')
+        : 'район: '+(seesT?'<b style="color:#2fae64">под наблюдением</b>':'вне зоны наблюдения'))+'</div>';
+  });
+  readout.innerHTML=lines;
+
+  // шкала покрытия
+  const fmtHrs=h=> h<1 ? Math.round(h*60)+' мин' : h.toFixed(1).replace('.',',')+' ч';
+  if(M.target2){
+    const hh=Math.floor(st.hoursPair), mm=Math.round((st.hoursPair-hh)*60);
+    gaugeBox.innerHTML='<div class="gauge"><div class="g-lab"><span>Сеансы связи «ПУ ↔ ПЛ»</span><b>'+hh+' ч '+mm+' мин / 24 ч</b></div>'+
+      '<div class="g-bar"><div class="g-fill" style="width:'+Math.min(100,st.hoursPair/24*100)+'%"></div></div></div>';
+  } else {
+    gaugeBox.innerHTML='<div class="gauge"><div class="g-lab"><span>'+M.target.label.charAt(0).toUpperCase()+M.target.label.slice(1)+'</span><b>'+fmtHrs(st.hours)+' / 24 ч</b></div>'+
+      '<div class="g-bar"><div class="g-fill" style="width:'+Math.min(100,st.hours/24*100)+'%"></div></div></div>';
+  }
+}
+function fmtKm(km){ return km>=1000? (km/1000).toFixed(1).replace('.',',')+' тыс. км' : Math.round(km)+' км'; }
+
+/* ============================ МИССИИ UI ============================ */
+const missionsBox=document.getElementById('missions');
+Object.keys(MISSIONS).forEach(k=>{
+  const b=document.createElement('button');
+  b.className='m-btn'; b.dataset.id=k;
+  b.innerHTML=MISSIONS[k].tab+'<small>'+(k==='geo'?'висит над точкой экватора':
+    k==='molniya'?'висит над севером по 6 часов':
+    k==='group'?'конструктор: закрой 24 часа':
+    k==='leo'?'быстрый пролёт, узкая зона':'сеансы ПУ ↔ ПЛ')+'</small>';
+  b.addEventListener('click',()=>select(k));
+  missionsBox.appendChild(b);
+});
+function select(id){
+  st.mission=id;
+  document.querySelectorAll('.m-btn').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
+  const M=MISSIONS[id];
+  qbox.innerHTML='<div class="q-tag">Вопрос аудитории</div><div class="q-text">'+M.q+'</div>';
+  desc.innerHTML=M.desc;
+  summary.innerHTML=M.summary;
+  document.getElementById('geoCtl').style.display=(id==='geo'||(id==='relay'&&st.relayType==='geo'))?'block':'none';
+  document.getElementById('apCtl').style.display=(id==='molniya'||id==='group'||(id==='relay'&&st.relayType==='molniya'))?'block':'none';
+  document.getElementById('satCtl').style.display=(id==='group')?'block':'none';
+  document.getElementById('relayCtl').style.display=(id==='relay')?'block':'none';
+  clickHint = (id==='relay')?'клик по карте — переместить ПЛ':'';
+  M.make();
+  computeHours();
+  syncCtl();
+}
+
+/* ============================ УПРАВЛЕНИЕ ============================ */
+const playBtn=document.getElementById('playBtn'), spdSlider=document.getElementById('spdSlider'),
+      spdVal=document.getElementById('spdVal'), lonSlider=document.getElementById('lonSlider'),
+      lonVal=document.getElementById('lonVal'), apSlider=document.getElementById('apSlider'),
+      apVal=document.getElementById('apVal');
+function syncCtl(){
+  playBtn.textContent=st.playing?'⏸ пауза':'▶ пуск';
+  spdVal.textContent='×'+st.speed+' (1 с = '+(st.speed>=60?Math.round(st.speed/60)+' мин':st.speed+' с')+')';
+  spdSlider.value=st.speed;
+  lonVal.textContent=st.geoLon+'°';
+  apVal.textContent=(st.mission==='group'?st.groupLon:st.apogeeLon)+'°';
+  const apLab=document.getElementById('apLab');
+  if(apLab) apLab.textContent = st.mission==='group' ? 'Долгота наблюдаемого района' : 'Долгота апогея «Молний»';
+}
+playBtn.addEventListener('click',()=>{ st.playing=!st.playing; syncCtl(); });
+document.getElementById('resetBtn').addEventListener('click',()=>{ MISSIONS[st.mission].make(); computeHours(); });
+spdSlider.addEventListener('input',()=>{ st.speed=+spdSlider.value; syncCtl(); });
+lonSlider.addEventListener('input',()=>{
+  st.geoLon=+lonSlider.value;
+  st.sats.forEach(s=>{ if(s.kind==='geo') s.lonDeg=st.geoLon; });
+  syncCtl(); computeHours();
+});
+apSlider.addEventListener('input',()=>{
+  if(st.mission==='group'){
+    st.groupLon=+apSlider.value;     // на группировке ползунок двигает долготу района
+    relayoutGroup();
+  } else {
+    st.apogeeLon=+apSlider.value;
+    st.sats.forEach(s=>{ if(s.kind==='molniya') s.raan0=st.apogeeLon*D2R-Math.PI/2; });
+  }
+  syncCtl(); computeHours();
+});
+document.getElementById('addBtn').addEventListener('click',()=>{
+  if(st.sats.length<12){
+    st.sats.push(molniya('КА-М'+(st.sats.length+1), st.sats.length%2?'#0e6ba8':'#5aa9d6'));
+    relayoutGroup(); computeHours();
+  }
+});
+document.getElementById('delBtn').addEventListener('click',()=>{
+  if(st.sats.length>1){ st.sats.pop(); relayoutGroup(); computeHours(); }
+});
+document.querySelectorAll('.relay-type').forEach(b=>b.addEventListener('click',()=>{
+  st.relayType=b.dataset.t;
+  document.querySelectorAll('.relay-type').forEach(x=>x.classList.toggle('active',x===b));
+  MISSIONS.relay.make(); computeHours();
+  document.getElementById('geoCtl').style.display=(st.relayType==='geo')?'block':'none';
+  document.getElementById('apCtl').style.display=(st.relayType==='molniya')?'block':'none';
+}));
+cv.addEventListener('click',e=>{
+  if(st.mission!=='relay') return;
+  const r=cv.getBoundingClientRect();
+  PL.lam=normLon((e.clientX-r.left)/W*360-Math.PI);
+  PL.phi=Math.asin(Math.max(-0.999,Math.min(0.999,(1-(e.clientY-r.top)/H)*2-1)));
+  computeHours();
+});
+
+/* ============================ ЦИКЛ ============================ */
+let last=performance.now();
+function frame(){
+  const now=performance.now();
+  const dt=Math.min(0.1,(now-last)/1000); last=now;
+  if(st.playing) st.t+=dt*st.speed;
+  if(st.t>86164*30) st.t=0;
+  draw();
+}
+let timerId=null;
+function restartTimer(){ if(timerId) clearInterval(timerId); timerId=setInterval(frame,40); }
+
+spdSlider.value=st.speed;
+select('molniya');
+syncCtl();
+restartTimer();
+window.addEventListener('resize',frame);
+/* периодический пересчёт часов покрытия (трассы НОО дрейфуют) */
+setInterval(()=>computeHours(),3000);
+</script>
+</body>
+</html>

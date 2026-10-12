@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лаборатория распространения радиоволн</title>
+<style>
+  :root{
+    --bg:#0b1622; --panel:#101f30; --panel2:#0d1a2a;
+    --line:#1d3350; --text:#dce8f2; --dim:#8fa3b8; --accent:#6fd3ff; --ok:#4cd97b; --warn:#ffd34d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+  header{padding:16px 22px 8px}
+  header h1{margin:0;font-size:21px;font-weight:600}
+  header .sub{color:var(--dim);margin-top:3px;font-size:13px}
+
+  .tabs{display:flex;gap:8px;padding:4px 22px 0;flex-wrap:wrap}
+  .tab{
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px 10px 0 0;
+    padding:9px 16px;color:var(--text);cursor:pointer;font-size:13.5px;font-weight:600;
+  }
+  .tab:hover{border-color:#2c4a70}
+  .tab.active{background:#12263c;border-color:var(--accent);color:var(--accent)}
+
+  .layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;padding:0 22px 10px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:0 12px 12px 12px;padding:14px}
+  .panel h2{margin:2px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim)}
+  .panel h2:not(:first-child){margin-top:16px}
+
+  .question{
+    border:1px solid #7a6420;background:#1c1810;border-radius:10px;padding:10px 12px;margin-bottom:4px;
+  }
+  .question .q-tag{color:var(--warn);font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700}
+  .question .q-text{font-size:13px;margin-top:3px;line-height:1.45}
+
+  .desc{font-size:12.5px;color:var(--dim);margin:8px 0 2px;line-height:1.5}
+
+  .ctl{margin:12px 0}
+  .ctl label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .ctl label b{color:var(--accent);font-weight:600}
+  input[type=range]{width:100%;accent-color:#4aa8d8}
+  .btn-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .btn{
+    background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 11px;
+    color:var(--text);cursor:pointer;font-size:12.5px;
+  }
+  .btn:hover{border-color:#2c4a70}
+  .btn.active{border-color:var(--accent);color:var(--accent);background:#12263c}
+  .note{font-size:11.5px;color:var(--dim);margin-top:6px;line-height:1.45}
+  .readout{
+    margin:10px 0;padding:9px 11px;border:1px solid var(--line);border-radius:9px;
+    background:var(--panel2);font-size:12.5px;line-height:1.5;
+  }
+  .readout b{color:var(--accent)}
+
+  .canvas-wrap{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;min-width:0}
+  #stage{width:100%;height:640px;display:block;border-radius:8px}
+
+  footer{color:var(--dim);font-size:11.5px;padding:8px 22px 24px}
+  @media (max-width:1000px){ .layout{grid-template-columns:1fr} #stage{height:480px} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Лаборатория распространения радиоволн</h1>
+  <div class="sub">Живые демонстрации к лекциям 2, 3 и 5: интерференция двух лучей · дифракция · радиогоризонт и рефракция · КВ и ионосфера · замирания</div>
+</header>
+
+<div class="tabs" id="tabs"></div>
+
+<main class="layout">
+  <aside class="panel">
+    <div id="qbox" class="question"></div>
+    <div id="desc" class="desc"></div>
+    <h2>Управление</h2>
+    <div id="controls"></div>
+    <h2>Что смотреть</h2>
+    <div id="note" class="note"></div>
+    <div id="readout" class="readout"></div>
+  </aside>
+  <section class="canvas-wrap">
+    <canvas id="stage"></canvas>
+  </section>
+</main>
+
+<footer>
+  Учебный демонстратор по материалам лекций 2, 3 и 5. Модели упрощены: отражение от земли принято идеальным,
+  атмосфера плоскослоистой, числа подобраны наглядными — не для инженерных расчётов. В демо «Радиогоризонт»
+  вертикальный масштаб увеличен, в демо «Ионосфера» горизонтальный сжат.
+</footer>
+
+<script>
+'use strict';
+
+/* ============================ ОБЩЕЕ ============================ */
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+let W=0, H=0, DPR=1;
+function fitCanvas(){
+  DPR = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if(w<10||h<10) return;
+  if(cv.width!==Math.round(w*DPR)||cv.height!==Math.round(h*DPR)){
+    cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR);
+  }
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  W=w; H=h;
+}
+function niceStep(range,maxTicks){
+  const raw=range/maxTicks, pow=Math.pow(10,Math.floor(Math.log10(raw)));
+  for(const m of [1,2,2.5,5,10]){ if(m*pow>=raw) return m*pow; }
+  return 10*pow;
+}
+function fmt(v,d=1){ return v.toFixed(d).replace('.',','); }
+
+/* --- конструкторы контролов --- */
+const controlsBox = document.getElementById('controls');
+function buildControls(list){
+  controlsBox.innerHTML='';
+  for(const c of list){
+    if(c.type==='slider'){
+      const fmt=c.fmt||(v=>v);
+      const wrap=document.createElement('div'); wrap.className='ctl';
+      const lab=document.createElement('label');
+      const name=document.createElement('span'); name.textContent=c.label;
+      const val=document.createElement('b'); val.textContent=fmt(c.get());
+      lab.appendChild(name); lab.appendChild(val);
+      const inp=document.createElement('input');
+      inp.type='range'; inp.min=c.min; inp.max=c.max; inp.step=c.step||1; inp.value=c.get();
+      inp.addEventListener('input',()=>{ c.set(+inp.value); val.textContent=fmt(c.get()); });
+      wrap.appendChild(lab); wrap.appendChild(inp); controlsBox.appendChild(wrap);
+    }
+    if(c.type==='buttons'){
+      const lab=document.createElement('label'); lab.style.cssText='display:block;font-size:13px;margin-bottom:5px';
+      lab.textContent=c.label; controlsBox.appendChild(lab);
+      const row=document.createElement('div'); row.className='btn-row';
+      const btns=[];
+      for(const o of c.options){
+        const b=document.createElement('button'); b.className='btn'; b.textContent=o.name;
+        b.addEventListener('click',()=>{ c.set(o.value); btns.forEach(x=>x.el.classList.remove('active')); b.classList.add('active'); });
+        if(c.get()===o.value) b.classList.add('active');
+        b.el=b; btns.push(b); row.appendChild(b);
+      }
+      controlsBox.appendChild(row);
+    }
+  }
+}
+function setReadout(html){ document.getElementById('readout').innerHTML=html; }
+function setQBox(q,extra){
+  document.getElementById('qbox').innerHTML='<div class="q-tag">Вопрос аудитории</div><div class="q-text">'+q+'</div>'+(extra||'');
+}
+function setDesc(t){ document.getElementById('desc').innerHTML=t; }
+function setNote(t){ document.getElementById('note').innerHTML=t; }
+
+function drawTower(g,x,groundY,hPx,label,valTxt){
+  g.strokeStyle='#9fb3c8'; g.lineWidth=2;
+  g.beginPath(); g.moveTo(x,groundY); g.lineTo(x,groundY-hPx); g.stroke();
+  g.lineWidth=1;
+  for(let i=1;i<=3;i++){
+    const y=groundY-hPx*i/4;
+    g.beginPath(); g.moveTo(x-5-i*1.5,y); g.lineTo(x+5+i*1.5,y); g.stroke();
+  }
+  g.fillStyle='#ffd34d';
+  g.beginPath(); g.arc(x,groundY-hPx,3.5,0,Math.PI*2); g.fill();
+  g.fillStyle='rgba(220,232,242,.85)'; g.font='11px "Segoe UI",sans-serif'; g.textAlign='left';
+  g.fillText(label,x+8,groundY-hPx-2);
+  if(valTxt){ g.fillStyle='rgba(255,211,77,.9)'; g.fillText(valTxt,x+8,groundY-hPx+11); }
+}
+
+/* ============================ ДЕМО 1. ДВА ЛУЧА ============================ */
+const demoTwoRay = {
+  id:'twoRay', tab:'Два луча',
+  question:'Почему сигнал у абонента то усиливается, то почти пропадает, хотя он сдвинулся всего на полметра?',
+  desc:'Прямая волна и волна, отражённая от земли, приходят в точку приёма разными путями. Разность хода меняется с расстоянием — волны то складываются, то гасят друг друга.',
+  note:'Двигайте приёмник ползунком «воспроизведение» или наблюдайте само: глубокие провалы на графике — быстрые замирания. Соседние минимумы отстоят на пути, где разность хода меняется на λ: масштаб замираний — единицы длин волн (лекция 3).',
+  f:900, h1:30, h2:2, playing:true, xPos:1400, dir:1, t:0,
+
+  level(x){ // относительный уровень, дБ (0 = максимум)
+    const lam=3e8/(this.f*1e6), k=2*Math.PI/lam;
+    const d1=Math.hypot(x,this.h1-this.h2), d2=Math.hypot(x,this.h1+this.h2);
+    const a1=Math.cos(k*d1)/d1, b1=Math.sin(k*d1)/d1;
+    const a2=Math.cos(k*d2)/d2, b2=Math.sin(k*d2)/d2;   // Γ = −1
+    const re=a1-a2, im=b1-b2;
+    return 20*Math.log10(Math.max(Math.hypot(re,im),1e-9));
+  },
+  render(t,dt){
+    const ml=56,mr=14,mt=12,mb=34;
+    const pw=W-ml-mr, ph=H-mt-mb;
+    const sceneH=ph*0.50, groundY=mt+sceneH;
+    const chartTop=groundY+42, chartBot=H-mb-6;
+    const X=x=>ml+x/5000*pw;
+    const yS=sceneH/118;
+
+    // фон: небо и земля
+    const sky=ctx.createLinearGradient(0,mt,0,groundY);
+    sky.addColorStop(0,'#12283c'); sky.addColorStop(1,'#173a54');
+    ctx.fillStyle=sky; ctx.fillRect(ml,mt,pw,sceneH);
+    ctx.fillStyle='#241d12'; ctx.fillRect(ml,groundY,pw,chartTop-groundY+8);
+    ctx.strokeStyle='rgba(255,255,255,.3)';
+    ctx.beginPath(); ctx.moveTo(ml,groundY); ctx.lineTo(ml+pw,groundY); ctx.stroke();
+
+    // шкала расстояния
+    ctx.fillStyle='rgba(220,232,242,.6)'; ctx.font='10.5px "Segoe UI"'; ctx.textAlign='center';
+    const km=niceStep(5,8);
+    for(let v=0;v<=5.001;v+=km){
+      ctx.fillText(v===5?'5 км':v, X(v*1000), groundY+14);
+      ctx.strokeStyle='rgba(255,255,255,.18)';
+      ctx.beginPath(); ctx.moveTo(X(v*1000),groundY); ctx.lineTo(X(v*1000),groundY+4); ctx.stroke();
+    }
+
+    // движущийся приёмник
+    if(this.playing){
+      this.xPos+=this.dir*dt*420;
+      if(this.xPos>4900){this.xPos=4900;this.dir=-1;}
+      if(this.xPos<80){this.xPos=80;this.dir=1;}
+    }
+    this.t=t;
+
+    // волновые фронты от передатчика
+    const A0={x:X(0),y:groundY-this.h1*yS};
+    for(let i=0;i<3;i++){
+      const r=((t*230)+i*140)%430;
+      ctx.strokeStyle=`rgba(150,228,255,${0.4*(1-r/430)})`; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.arc(A0.x,A0.y,r,Math.PI*0.06,Math.PI*0.94); ctx.stroke();
+    }
+
+    // лучи: прямой и отражённый
+    const Rx={x:X(this.xPos),y:groundY-this.h2*yS};
+    const xB=this.xPos*this.h1/(this.h1+this.h2);
+    const B={x:X(xB),y:groundY};
+    ctx.setLineDash([7,6]); ctx.lineDashOffset=-t*46;
+    ctx.strokeStyle='rgba(150,228,255,.85)'; ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.moveTo(A0.x,A0.y); ctx.lineTo(Rx.x,Rx.y); ctx.stroke();       // прямой
+    ctx.strokeStyle='rgba(255,211,77,.65)';
+    ctx.beginPath(); ctx.moveTo(A0.x,A0.y); ctx.lineTo(B.x,B.y); ctx.lineTo(Rx.x,Rx.y); ctx.stroke(); // отражённый
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,211,77,.8)'; ctx.beginPath(); ctx.arc(B.x,B.y,2.6,0,7); ctx.fill();
+
+    drawTower(ctx,A0.x,groundY,this.h1*yS,'передатчик','h₁ = '+this.h1+' м');
+    // приёмник — автомобильчик
+    ctx.fillStyle='#ffd34d';
+    ctx.fillRect(Rx.x-9,Rx.y-7,18,6);
+    ctx.fillRect(Rx.x-5,Rx.y-11,9,4);
+    ctx.fillStyle='#0b1622';
+    ctx.beginPath(); ctx.arc(Rx.x-5,Rx.y,2,0,7); ctx.arc(Rx.x+5,Rx.y,2,0,7); ctx.fill();
+    ctx.fillStyle='rgba(220,232,242,.85)'; ctx.textAlign='center';
+    ctx.fillText('приёмник · h₂ = '+this.h2+' м',Rx.x,Rx.y-18);
+
+    // график уровня
+    ctx.fillStyle='#0d1a2a'; ctx.fillRect(ml,chartTop-2,pw,chartBot-chartTop+4);
+    ctx.fillStyle='rgba(220,232,242,.8)'; ctx.textAlign='left';
+    ctx.fillText('уровень сигнала, дБ (отн. максимума)',ml+4,chartTop-8);
+    let maxA=-1e9,minL=1e9;
+    const N=420,Ls=[];
+    for(let i=0;i<=N;i++){ const L=this.level(i*5000/N); Ls.push(L); if(L>maxA)maxA=L; if(L<minL)minL=L; }
+    const spanDb=Math.max(12,maxA-minL);
+    const Y=l=>chartTop+(maxA-l)/spanDb*(chartBot-chartTop);
+    ctx.strokeStyle='rgba(255,255,255,.15)';
+    for(let dv=0;dv>=-Math.floor(spanDb/10)*10;dv-=10){
+      const y=Y(maxA+dv);
+      ctx.beginPath(); ctx.moveTo(ml,y); ctx.lineTo(ml+pw,y); ctx.stroke();
+      ctx.fillStyle='rgba(220,232,242,.5)'; ctx.textAlign='right'; ctx.fillText(dv+'',ml-4,y+3);
+    }
+    ctx.beginPath();
+    for(let i=0;i<=N;i++){ const px=X(i*5000/N), py=Y(Ls[i]); i?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+    ctx.strokeStyle='#6fd3ff'; ctx.lineWidth=1.4; ctx.stroke();
+    ctx.lineTo(ml+pw,chartBot); ctx.lineTo(ml,chartBot); ctx.closePath();
+    ctx.fillStyle='rgba(111,211,255,.10)'; ctx.fill();
+
+    // бегущий курсор
+    const cur=this.level(this.xPos), cy=Y(cur);
+    ctx.strokeStyle='rgba(255,211,77,.7)'; ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.moveTo(X(this.xPos),chartTop); ctx.lineTo(X(this.xPos),chartBot); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#ffd34d'; ctx.beginPath(); ctx.arc(X(this.xPos),cy,4,0,7); ctx.fill();
+    ctx.textAlign='left'; ctx.fillStyle='#ffd34d';
+    ctx.fillText('сейчас: '+fmt(cur)+' дБ', Math.min(X(this.xPos)+8,ml+pw-110), cy-6);
+
+    const lam=3e8/(this.f*1e6);
+    setReadout('λ = <b>'+fmt(lam*100,1)+' см</b> · приёмник: <b>'+fmt(this.xPos/1000,2)+' км</b><br>'+
+      'Уровень сейчас: <b>'+fmt(cur)+' дБ</b> — разность хода лучей '+
+      fmt((Math.hypot(this.xPos,this.h1+this.h2)-Math.hypot(this.xPos,this.h1-this.h2))*100,1)+' см = '+
+      fmt((Math.hypot(this.xPos,this.h1+this.h2)-Math.hypot(this.xPos,this.h1-this.h2))/lam,1)+' λ');
+  },
+  controls:[
+    {type:'slider',label:'Частота, МГц',min:100,max:3000,step:50,get(){return demoTwoRay.f},set(v){demoTwoRay.f=v}},
+    {type:'slider',label:'Высота передатчика h₁, м',min:5,max:100,get(){return demoTwoRay.h1},set(v){demoTwoRay.h1=v}},
+    {type:'slider',label:'Высота приёмника h₂, м',min:1,max:10,get(){return demoTwoRay.h2},set(v){demoTwoRay.h2=v}},
+    {type:'buttons',label:'Воспроизведение',options:[{name:'▶ движение',value:1},{name:'⏸ пауза',value:0}],
+      get(){return demoTwoRay.playing?1:0},set(v){demoTwoRay.playing=!!v}},
+  ]
+};
+
+/* ============================ ДЕМО 2. ДИФРАКЦИЯ ============================ */
+const demoDiff = {
+  id:'diff', tab:'Дифракция',
+  question:'За высоким зданием прямой видимости нет — почему связь всё-таки есть, и почему на 900 МГц она хуже, чем на 150 МГц?',
+  desc:'Фронт волны, огибая крышу, становится источником вторичных волн (принцип Гюйгенса). Они «затекают» в зону тени, но с потерями: чем выше частота, тем глубже тень.',
+  note:'Тёмная область — геометрическая тень. График внизу — потери на дифракции (формула ножа ITU-R P.526): сразу за зданием минимум 6 дБ, дальше тень «рассасывается». Поднимите здание и частоту — связь уйдёт.',
+  f:900, hb:40, t:0, wx:250, dir:1,
+
+  lossAt(x){ // потери, дБ, для приёмника на земле в точке x (м)
+    const d1=160, d2=x-170;
+    if(d2<4) return 0;
+    const lam=3e8/(this.f*1e6);
+    const losH=30-28*d1/(d1+d2);              // высота линии прямой видимости над зданием
+    const hEff=this.hb-losH;                  // насколько здание выше линии
+    if(hEff<-1e9) return 0;
+    const nu=hEff*Math.sqrt(2*(d1+d2)/(lam*d1*d2));
+    if(nu<=-0.78) return 0;
+    return Math.max(0, 6.9+20*Math.log10(Math.sqrt((nu-0.1)**2+1)+nu-0.1));
+  },
+  render(t,dt){
+    const ml=52,mr=14,mt=12,mb=36;
+    const pw=W-ml-mr, ph=H-mt-mb;
+    const sceneH=ph*0.56, groundY=mt+sceneH;
+    const chartTop=groundY+46, chartBot=H-mb-4;
+    const X=x=>ml+x/460*pw, Y=z=>groundY-z*(sceneH/92);
+
+    const sky=ctx.createLinearGradient(0,mt,0,groundY);
+    sky.addColorStop(0,'#12283c'); sky.addColorStop(1,'#173a54');
+    ctx.fillStyle=sky; ctx.fillRect(ml,mt,pw,sceneH);
+    ctx.fillStyle='#241d12'; ctx.fillRect(ml,groundY,pw,chartTop-groundY+10);
+    ctx.strokeStyle='rgba(255,255,255,.3)';
+    ctx.beginPath(); ctx.moveTo(ml,groundY); ctx.lineTo(ml+pw,groundY); ctx.stroke();
+
+    // здание
+    const bx=158,bw=24,hb=this.hb;
+
+    // геометрическая тень: от вершины передатчика через крышу, между линией визирования и землёй
+    const T={x:X(10),y:Y(30)}, E={x:X(170),y:Y(hb)};
+    const s=(hb-30)/160;                 // наклон линии T→E
+    const yline=x=>30+s*(x-10);
+    const shadowPts=[[170,hb]];
+    if(s<0){
+      const xg=Math.min(10+30/(-s),460); // линия уходит в землю
+      shadowPts.push([xg,0],[182,0]);
+    }else{
+      shadowPts.push([460,Math.min(yline(460),200)],[460,0],[182,0]);
+    }
+    ctx.fillStyle='rgba(4,8,18,.55)';
+    ctx.beginPath();
+    shadowPts.forEach(([xx,zz],i)=>{ const px=X(xx),py=Y(zz); i?ctx.lineTo(px,py):ctx.moveTo(px,py); });
+    ctx.closePath(); ctx.fill();
+
+    // здание поверх тени
+    ctx.fillStyle='#2e3b4d';
+    ctx.fillRect(X(bx),Y(hb),X(bx+bw)-X(bx),groundY-Y(hb));
+    ctx.fillStyle='#0d1a2a';
+    for(let r=0;r<Math.floor(hb/9);r++)for(let c2=0;c2<3;c2++){
+      ctx.fillRect(X(bx)+6+c2*7,Y(hb)+7+r*9,4,5);
+    }
+    ctx.strokeStyle='#4c6076';
+    ctx.strokeRect(X(bx),Y(hb),X(bx+bw)-X(bx),groundY-Y(hb));
+
+    // фронты от источника
+    const distTE=Math.hypot(170-10,hb-30);
+    for(let i=0;i<4;i++){
+      const r=((t*150)+i*95)%390;
+      ctx.strokeStyle=`rgba(150,228,255,${0.38*(1-r/390)})`; ctx.lineWidth=1.3;
+      ctx.beginPath(); ctx.arc(T.x,T.y,r,Math.PI*0.02,Math.PI*0.98); ctx.stroke();
+    }
+    // вторичные источники у кромки крыши (Гюйгенс), с задержкой на путь T→E
+    const edgePhase=t*150-distTE;
+    for(let i=0;i<3;i++){
+      const r=(edgePhase+i*95)%330;
+      if(r>0){
+        ctx.strokeStyle=`rgba(255,211,77,${0.35*(1-r/330)})`; ctx.lineWidth=1.2;
+        ctx.beginPath(); ctx.arc(E.x,E.y,r,0,Math.PI); ctx.stroke();
+      }
+    }
+
+    drawTower(ctx,T.x,groundY,Y(0)-Y(30),'базовая станция','30 м');
+    ctx.fillStyle='rgba(220,232,242,.8)'; ctx.textAlign='center';
+    ctx.fillText('здание · '+hb+' м',X(170),Y(hb)-6);
+    ctx.fillStyle='#ffd34d'; ctx.beginPath(); ctx.arc(E.x,E.y,3,0,7); ctx.fill();
+
+    // идущий человек
+    if(true){
+      this.wx+=this.dir*dt*22;
+      if(this.wx>440){this.wx=440;this.dir=-1;}
+      if(this.wx<200){this.wx=200;this.dir=1;}
+      const px=X(this.wx),py=groundY;
+      ctx.strokeStyle='#ffd34d'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(px,py-13,3,0,7); ctx.moveTo(px,py-10); ctx.lineTo(px,py-4);
+      ctx.moveTo(px,py-4); ctx.lineTo(px-3,py); ctx.moveTo(px,py-4); ctx.lineTo(px+3,py);
+      ctx.moveTo(px-4,py-8); ctx.lineTo(px+4,py-8); ctx.stroke();
+      ctx.textAlign='center'; ctx.fillStyle='rgba(255,211,77,.9)';
+      ctx.fillText('абонент',px,py+12);
+    }
+
+    // график потерь вдоль земли
+    ctx.fillStyle='#0d1a2a'; ctx.fillRect(ml,chartTop-2,pw,chartBot-chartTop+4);
+    ctx.fillStyle='rgba(220,232,242,.8)'; ctx.textAlign='left';
+    ctx.fillText('потери на дифракции за зданием, дБ',ml+4,chartTop-8);
+    let maxL2=8; { for(let x=176;x<=458;x+=4) maxL2=Math.max(maxL2,this.lossAt(x)); }
+    const lMax=Math.ceil((maxL2+2)/5)*5;
+    const Yl2=v=>chartBot-v/lMax*(chartBot-chartTop);  // 0 дБ внизу, максимум вверху
+    ctx.strokeStyle='rgba(255,255,255,.15)';
+    for(let dv=0;dv<=lMax;dv+=10){
+      ctx.beginPath(); ctx.moveTo(ml,Yl2(dv)); ctx.lineTo(ml+pw,Yl2(dv)); ctx.stroke();
+      ctx.fillStyle='rgba(220,232,242,.5)'; ctx.textAlign='right'; ctx.fillText(dv+'',ml-4,Yl2(dv)+3);
+    }
+    ctx.beginPath();
+    let started=false;
+    for(let x=174;x<=458;x+=3){
+      const L=this.lossAt(x), px=X(x), py=Yl2(L);
+      if(!started){ctx.moveTo(px,py);started=true;} else ctx.lineTo(px,py);
+    }
+    ctx.strokeStyle='#6fd3ff'; ctx.lineWidth=1.6; ctx.stroke();
+    ctx.textAlign='center'; ctx.fillStyle='rgba(220,232,242,.6)';
+    for(const xv of [250,350,450]){ ctx.fillText(xv+' м',X(xv),chartBot+13); }
+    ctx.fillStyle='rgba(255,211,77,.8)';
+    ctx.fillText('здание (170 м)',X(170),chartBot+13);
+
+    const Lcur=this.lossAt(this.wx);
+    setReadout('Частота: <b>'+this.f+' МГц</b> (λ = '+fmt(3e8/(this.f*1e6)*100,1)+' см)<br>'+
+      'Абонент в '+fmt(this.wx-170,0)+' м за зданием: потери <b>−'+fmt(Lcur)+' дБ</b>'+
+      (Lcur<0.5?' — прямая видимость, тени нет':' — сигнал затекает в тень по Гюйгенсу'));
+  },
+  controls:[
+    {type:'slider',label:'Частота, МГц',min:150,max:3000,step:50,get(){return demoDiff.f},set(v){demoDiff.f=v}},
+    {type:'slider',label:'Высота здания, м',min:10,max:70,get(){return demoDiff.hb},set(v){demoDiff.hb=v}},
+  ]
+};
+
+/* ============================ ДЕМО 3. РАДИОГОРИЗОНТ ============================ */
+const demoHorizon = {
+  id:'horizon', tab:'Радиогоризонт',
+  question:'УКВ «не умеет» огибать Землю. Насколько далеко уйдёт связь — и что меняет атмосферная рефракция?',
+  desc:'Прямая видимость ограничена кривизной Земли. Стандартная рефракция (k = 4/3) «поднимает» радиогоризонт на 15%. При инверсии — резком росте температуры с высотой — лучи изгибаются сильнее Земли: возникает тропосферный волновод.',
+  note:'Сравните три режима. Обратите внимание на морское правило из лекции 5: дальность УКВ-связи в милях ≈ √(2h₁)+√(2h₂) (высоты антенн в метрах) — его даёт именно стандартная рефракция.',
+  h1:30, h2:2, mode:'std',  // no | std | duct
+
+  kR(){ return this.mode==='no' ? 6371e3 : 6371e3*4/3; },
+  groundY_m(x){ return -x*x/(2*this.kR()); },  // земля в "распрямлённых" координатах, x в м
+  horizons(){
+    const h1=this.h1,h2=this.h2,kR=this.kR();
+    const x1=Math.sqrt(2*kR*h1), x2=Math.sqrt(2*kR*h2);
+    return {x1,x2,D:x1+x2};
+  },
+  render(t,dt){
+    const ml=48,mr=14,mt=12,mb=34;
+    const pw=W-ml-mr, ph=H-mt-mb;
+    const X=xm=>ml+xm/40000*pw;                 // x в метрах, диапазон 0..40 км
+    const yMax=Math.max(240,this.h1+80);
+    const zS=ph*0.5/yMax;                       // px на метр высоты
+    const Y=z=>mt+ph*0.66 - z*zS;               // z — высота над касательной, м (вверх)
+
+    // земля-парабола
+    const gnd=[];
+    for(let i=0;i<=120;i++){ const xm=i*40000/120; gnd.push([X(xm),Y(this.groundY_m(xm))]); }
+    ctx.beginPath(); ctx.moveTo(ml,mt+ph);
+    for(const [px,py] of gnd) ctx.lineTo(px,py);
+    ctx.lineTo(ml+pw,mt+ph); ctx.closePath();
+    const gg=ctx.createLinearGradient(0,mt+ph*0.3,0,mt+ph);
+    gg.addColorStop(0,'#2c2416'); gg.addColorStop(1,'#191308');
+    ctx.fillStyle=gg; ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.35)';
+    ctx.beginPath(); for(let i=0;i<gnd.length;i++){ i?ctx.lineTo(gnd[i][0],gnd[i][1]):ctx.moveTo(gnd[i][0],gnd[i][1]); } ctx.stroke();
+
+    const xTx=4000, xRx=36000;
+    const gyTx=Y(this.groundY_m(xTx)), gyRx=Y(this.groundY_m(xRx));
+    const h={x1:0,x2:0,D:0}; Object.assign(h,this.horizons());
+    const reachFrom=xTx, reachTo=xTx+h.D;                    // предельная точка приёма
+    const connected=xRx<=reachTo;
+
+    // зона "за горизонтом"
+    if(!connected){
+      ctx.fillStyle='rgba(120,20,20,.25)';
+      ctx.fillRect(X(Math.max(reachTo,xTx)),mt,X(40000)-X(Math.max(reachTo,xTx)),gyRx+ph*0.38-mt);
+      ctx.fillStyle='rgba(240,150,140,.9)'; ctx.textAlign='right'; ctx.font='12px "Segoe UI"';
+      ctx.fillText('за радиогоризонтом — прямой связи нет',ml+pw-8,mt+24);
+    }
+
+    // луч-касательная: от вершины передатчика через точку касания до предельной дальности
+    const txTop={x:X(xTx),y:gyTx-this.h1*zS};
+    const mSlope=-h.x1/this.kR();
+    const p1={x:X(xTx+h.x1),y:Y(this.groundY_m(xTx+h.x1))};
+    const pEnd={x:X(xTx+h.D),y:Y(this.groundY_m(xTx+h.D)+this.h2)};
+    ctx.strokeStyle=connected?'#4cd97b':'#e0564a'; ctx.lineWidth=1.8;
+    ctx.beginPath(); ctx.moveTo(txTop.x,txTop.y); ctx.lineTo(p1.x,p1.y); ctx.stroke();
+    ctx.setLineDash([5,5]); ctx.globalAlpha=0.75;
+    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(pEnd.x,pEnd.y); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+    ctx.fillStyle='rgba(220,232,242,.75)'; ctx.font='11px "Segoe UI"'; ctx.textAlign='center';
+    ctx.fillText('радиогоризонт',p1.x,p1.y-10);
+
+    if(this.mode==='duct'){
+      // тропосферный волновод: лучи сильной инверсии запираются у поверхности
+      for(let i=0;i<8;i++){
+        let x=xTx, z=this.h1, s=-(0.7+i*0.75)*Math.PI/180; // спускающиеся лучи
+        ctx.strokeStyle=`rgba(150,228,255,${0.25+0.035*i})`; ctx.lineWidth=1.1;
+        ctx.beginPath(); ctx.moveTo(X(x),Y(z+this.groundY_m(x)));
+        const dx=100, cD=2.5e-6;                // кривизна сильнее кривизны Земли
+        while(x<40000){
+          s+=-cD*dx; z+=s*dx;
+          if(z<0.5){ z=0.5; s=Math.min(Math.abs(s)*0.85, 0.012); } // отражение и "запирание"
+          x+=dx; ctx.lineTo(X(x),Y(z+this.groundY_m(x)));
+        }
+        ctx.stroke();
+      }
+    }
+
+    // шкала дальности
+    ctx.fillStyle='rgba(220,232,242,.6)'; ctx.textAlign='center';
+    const ks=niceStep(40,8);
+    for(let km=0;km<=40.001;km+=ks){
+      const gy=Y(this.groundY_m(km*1000));
+      ctx.fillText(km===40?'40 км':km+'',X(km*1000),gy+14);
+      ctx.strokeStyle='rgba(255,255,255,.15)';
+      ctx.beginPath(); ctx.moveTo(X(km*1000),gy); ctx.lineTo(X(km*1000),gy+5); ctx.stroke();
+    }
+
+    drawTower(ctx,txTop.x,gyTx,this.h1*zS,'передатчик','h₁ = '+this.h1+' м');
+    drawTower(ctx,X(xRx),gyRx,this.h2*zS,'приёмник','h₂ = '+this.h2+' м');
+
+    const Dkm=h.D/1000, miles=Math.sqrt(2*this.h1)+Math.sqrt(2*this.h2);
+    const verdict = this.mode==='duct'
+      ? 'в волноводе — связь возможна и за горизонтом'
+      : (connected?'связь есть':'связи нет — за горизонтом');
+    setReadout('Дальность прямой видимости:<br><b>D = 3,57·(√h₁+√h₂)·√k ≈ '+fmt(Dkm)+' км</b><br>'+
+      'Морское правило (лекция 5): √(2h₁)+√(2h₂) ≈ <b>'+fmt(miles)+' миль</b> ('+fmt(miles*1.852)+' км)<br>'+
+      'Приёмник на 36 км: <b>'+verdict+'</b>');
+  },
+  controls:[
+    {type:'slider',label:'Высота передатчика h₁, м',min:5,max:120,get(){return demoHorizon.h1},set(v){demoHorizon.h1=v}},
+    {type:'slider',label:'Высота приёмника h₂, м',min:2,max:60,get(){return demoHorizon.h2},set(v){demoHorizon.h2=v}},
+    {type:'buttons',label:'Состояние атмосферы',options:[
+      {name:'без рефракции (k=1)',value:'no'},
+      {name:'стандартная (k=4/3)',value:'std'},
+      {name:'инверсия · волновод',value:'duct'}],
+      get(){return demoHorizon.mode},set(v){demoHorizon.mode=v}},
+  ]
+};
+
+/* ============================ ДЕМО 4. ИОНОСФЕРА ============================ */
+const demoIono = {
+  id:'iono', tab:'Ионосфера',
+  question:'Почему днём КВ-связь ведут на частотах 8–30 МГц, а ночью — ниже 8 МГц?',
+  desc:'КВ отражается от ионосферы и скачками идёт вокруг земного шара. Днём слой D (60–90 км) поглощает низкие частоты — нужны ≥8 МГц. Ночью D исчезает, и работают более низкие частоты. Но МПЧ ночью тоже ниже: слишком высокая частота уйдёт сквозь слой в космос.',
+  note:'Двигайте частоту и угол: увидите три исхода — отражение (связь есть), поглощение в D (день, низкая частота), проход сквозь слой в космос (частота выше МПЧ). Тёмная полоса у земли — зона молчания.',
+  day:true, f:12, alpha:18, t:0,
+
+  fc(){ return this.day?9:5; },               // критическая частота слоя F, МГц (условные значения)
+  Href(){ return this.day?300:260; },          // высота отражения, км
+  muf(){ return this.fc()/Math.sin(this.alpha*Math.PI/180); },
+  render(t,dt){
+    const ml=50,mr=14,mt=12,mb=34;
+    const pw=W-ml-mr, ph=H-mt-mb;
+    const Xkm=x=>ml+x/4200*pw;                  // 0..4200 км
+    const Ykm=z=>mt+ph-(z/430)*(ph-16);         // 0..430 км
+
+    // небо: день светлее
+    const sky=ctx.createLinearGradient(0,mt,0,mt+ph);
+    if(this.day){ sky.addColorStop(0,'#23405c'); sky.addColorStop(1,'#1d5273'); }
+    else { sky.addColorStop(0,'#060b16'); sky.addColorStop(1,'#0c2032'); }
+    ctx.fillStyle=sky; ctx.fillRect(ml,mt,pw,ph);
+    if(!this.day){
+      ctx.fillStyle='rgba(255,255,255,.5)';
+      for(let i=0;i<40;i++){
+        const sx=ml+((i*173)%pw), sy=mt+((i*97)%(ph*0.5));
+        ctx.fillRect(sx,sy,1.4,1.4);
+      }
+    }
+    ctx.fillStyle=this.day?'#241d12':'#131a10';
+    ctx.fillRect(ml,Ykm(0),pw,mt+ph-Ykm(0)+4);
+
+    // слои
+    const layers = this.day
+      ? [{n:'D',z0:60,z1:90,c:'rgba(232,98,14,.30)'},{n:'E',z0:95,z1:120,c:'rgba(111,211,255,.14)'},
+         {n:'F1',z0:140,z1:230,c:'rgba(111,211,255,.12)'},{n:'F2',z0:240,z1:380,c:'rgba(111,211,255,.18)'}]
+      : [{n:'E',z0:100,z1:120,c:'rgba(111,211,255,.08)'},{n:'F',z0:110,z1:370,c:'rgba(111,211,255,.18)'}];
+    for(const L of layers){
+      ctx.fillStyle=L.c;
+      ctx.fillRect(ml,Ykm(L.z1),pw,Ykm(L.z0)-Ykm(L.z1));
+      ctx.fillStyle='rgba(220,232,242,.75)'; ctx.font='12px "Segoe UI"'; ctx.textAlign='left';
+      ctx.fillText(L.n,ml+8,Ykm((L.z0+L.z1)/2)+4);
+    }
+    if(this.day){
+      ctx.fillStyle='rgba(240,170,120,.85)'; ctx.font='11px "Segoe UI"';
+      ctx.fillText('слой D: поглощает НЧ!',ml+70,Ykm(75)+4);
+    }
+
+    // поверхность и поверхностная волна
+    const gw=ctx.createLinearGradient(Xkm(0),0,Xkm(300),0);
+    gw.addColorStop(0,'rgba(111,211,255,.55)'); gw.addColorStop(1,'rgba(111,211,255,0)');
+    ctx.fillStyle=gw;
+    ctx.fillRect(Xkm(0),Ykm(0)-3,Xkm(320)-Xkm(0),5);
+    ctx.fillStyle='rgba(220,232,242,.6)'; ctx.font='10.5px "Segoe UI"';
+    ctx.fillText('поверхностная волна: десятки км',Xkm(10),Ykm(0)-26);
+
+    // луч: ломанаяTX → вершина скачка → земля → следующий скачок
+    const a=this.alpha*Math.PI/180, x0=30; // старт, км
+    const Hr=this.Href();
+    const run=Hr/Math.tan(a);              // пробег по горизонтали до высоты Hr, км
+    const muf=this.muf(), pass=this.f>muf;
+    const attD=this.day?Math.min(24,260/(this.f*this.f)):0;
+    let cx0=x0, hopsDone=0;
+    const pts=[[Xkm(x0),Ykm(0)]];
+    while(hopsDone<(pass?1:3)){
+      const xApex=cx0+run;
+      if(cx0+run>4200){ // уходит за край схемы
+        pts.push([Xkm(Math.min(4200,cx0+run/2)),Ykm(Hr/2)]);
+        pts.push([Xkm(4200),Ykm(Hr)]);
+        break;
+      }
+      pts.push([Xkm(xApex),Ykm(Hr)]);
+      if(pass){ pts.push([Xkm(xApex+300),Ykm(Hr+180)]); pts.push([Xkm(xApex+600),Ykm(430)]); break; }
+      const xLand=cx0+2*run;
+      pts.push([Xkm(Math.min(xLand,4200)),Ykm(0)]);
+      if(xLand>4200) break;
+      cx0=xLand; hopsDone++;
+    }
+    // стиль: через D — пунктир красноватый
+    if(this.day&&this.f<10){
+      ctx.setLineDash([6,5]);
+      ctx.strokeStyle=`rgba(240,120,90,${Math.max(.35,1-attD/28)})`;
+    } else {
+      ctx.strokeStyle='rgba(150,228,255,.9)';
+    }
+    ctx.lineWidth=2;
+    for(let i=1;i<pts.length;i++){ ctx.beginPath(); ctx.moveTo(pts[i-1][0],pts[i-1][1]); ctx.lineTo(pts[i][0],pts[i][1]); ctx.stroke(); }
+    ctx.setLineDash([]);
+
+    // зона молчания
+    const landX=pass?null:Math.min(4200,x0+2*run);
+    if(landX&&landX>260){
+      const qs=Math.min(landX-30,4100);
+      ctx.fillStyle='rgba(4,8,18,.5)';
+      ctx.fillRect(Xkm(120),Ykm(0)-4,Xkm(qs)-Xkm(120),7);
+      ctx.fillStyle='rgba(240,150,140,.9)'; ctx.textAlign='center'; ctx.font='11px "Segoe UI"';
+      ctx.fillText('зона молчания',Xkm((120+qs)/2),Ykm(0)-14);
+    }
+    if(landX){
+      ctx.fillStyle='#ffd34d';
+      ctx.beginPath(); ctx.arc(Xkm(landX),Ykm(0)-4,4,0,7); ctx.fill();
+      ctx.fillStyle='rgba(255,211,77,.9)'; ctx.textAlign='center'; ctx.font='11px "Segoe UI"';
+      ctx.fillText('приход скачка · '+Math.round(landX)+' км',Xkm(landX),Ykm(0)+16);
+    }
+
+    // солнце/луна
+    ctx.fillStyle=this.day?'#ffd34d':'#cfd8e3';
+    ctx.beginPath(); ctx.arc(Xkm(3700),Ykm(330),14,0,7); ctx.fill();
+    ctx.textAlign='center'; ctx.fillStyle='rgba(220,232,242,.85)'; ctx.font='13px "Segoe UI"';
+    ctx.fillText(this.day?'☀ ДЕНЬ':'☾ НОЧЬ',Xkm(3700),Ykm(370));
+
+    // МПЧ
+    ctx.fillStyle='rgba(220,232,242,.85)'; ctx.font='12px "Segoe UI"'; ctx.textAlign='left';
+    ctx.fillText('МПЧ ≈ f₀F₂ / sin α = '+fmt(muf)+' МГц',ml+pw-230,mt+18);
+
+    let verdict;
+    if(pass) verdict='<b style="color:#e0564a">частота выше МПЧ — волна ушла в космос, связи нет</b>';
+    else if(this.day&&this.f<8) verdict='<b style="color:#e8620e">работает, но сильно ослаблена: −'+fmt(attD)+' дБ в слое D. Днём нужны ≥ 8 МГц</b>';
+    else verdict='<b style="color:#4cd97b">отражение от слоя F — связь есть</b>';
+    setReadout('Частота: <b>'+this.f+' МГц</b> · угол возвышения: <b>'+this.alpha+'°</b><br>'+
+      'Скачок приходит на <b>'+(pass?'—':Math.round(landX)+' км')+'</b> · поглощение в D: <b>'+fmt(this.day?-attD:0)+' дБ</b><br>'+verdict);
+  },
+  controls:[
+    {type:'buttons',label:'Время суток',options:[{name:'☀ день',value:1},{name:'☾ ночь',value:0}],
+      get(){return demoIono.day?1:0},set(v){demoIono.day=!!v}},
+    {type:'slider',label:'Частота, МГц',min:3,max:30,step:1,get(){return demoIono.f},set(v){demoIono.f=v}},
+    {type:'slider',label:'Угол возвышения, °',min:5,max:40,get(){return demoIono.alpha},set(v){demoIono.alpha=v}},
+  ]
+};
+
+/* ============================ ДЕМО 5. ЗАМИРАНИЯ ============================ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+const demoFading = {
+  id:'fading', tab:'Замирания',
+  question:'Какой запас по уровню сигнала нужен, чтобы связь не рвалась? И почему замирания бывают «медленные» и «быстрые»?',
+  desc:'Итоговая картина лекции 3: на график сигнала накладываются медленные замирания (тень от зданий, масштаб десятки–сотни метров, σ зависит от среды) и быстрые (интерференция, масштаб ~λ/2). Красные участки — связь ниже порога.',
+  note:'Переключайте масштаб маршрута: на 10 км видны только медленные замирания — приблизьте до 50–300 м, и внутри каждой «тени» проявится быстрая рябь с шагом ~λ/2. Затем увеличьте запас и посмотрите, как исчезают красные провалы.',
+  preset:'Город', sigma:8, f:900, margin:6.5, span:300, xPos:150, playing:true,
+
+  _slow:null,_slowFor:'',
+  slow(x){
+    const key=this.sigma+'_'+this.span;
+    if(this._slowFor!==key){
+      const rng=mulberry32(1234), comps=[];
+      const minP=Math.max(12,this.span/50), maxP=Math.max(minP*8,this.span/5);
+      for(let i=0;i<12;i++){
+        const P=minP*Math.exp(rng()*Math.log(maxP/minP));
+        comps.push([P,rng()*6.283,rng()]);
+      }
+      // нормировка по фактической σ
+      let s2=0; for(let i=0;i<3000;i++){ const xs=i*this.span/3000; let v=0;
+        for(const [Lam,ph,a] of comps) v+=a*Math.sin(6.283*xs/Lam+ph);
+        s2+=v*v; }
+      const norm=Math.sqrt(s2/3000);
+      this._slow=x=>{ let v=0; for(const [Lam,ph,a] of comps) v+=a*Math.sin(6.283*x/Lam+ph); return this.sigma*v/norm; };
+      this._slowFor=key;
+    }
+    return this._slow(x);
+  },
+  fast(x){
+    const lam=3e8/(this.f*1e6);
+    return 4.5*Math.sin(6.283*2*x/lam)+2.2*Math.sin(6.283*3.7*x/lam+1.3);
+  },
+  level(x){ return -25*Math.log10(Math.max(x,30)/30)+this.slow(x)+this.fast(x); },
+  render(t,dt){
+    const ml=52,mr=14,mt=12,mb=40;
+    const pw=W-ml-mr, ph=H-mt-mb;
+    const span=this.span;
+    const X=x=>ml+x/span*pw;
+    if(this.playing){ this.xPos=(t*40)%span; }
+
+    // динамический диапазон графика по фактическим уровням
+    let lo=1e9,hi=-1e9;
+    for(let i=0;i<=100;i++){ const L=this.level(i*span/100)+this.margin; if(L<lo)lo=L; if(L>hi)hi=L; }
+    hi=Math.max(hi,lo+15); lo=Math.min(lo,hi-45);
+    const Y=v=>mt+(hi-v)/(hi-lo)*ph;
+
+    // сетка
+    ctx.fillStyle='#0d1a2a'; ctx.fillRect(ml,mt,pw,ph);
+    ctx.strokeStyle='rgba(255,255,255,.12)';
+    for(let dv=Math.ceil(lo/10)*10;dv<=hi;dv+=10){ const y=Y(dv);
+      ctx.beginPath(); ctx.moveTo(ml,y); ctx.lineTo(ml+pw,y); ctx.stroke();
+      ctx.fillStyle='rgba(220,232,242,.45)'; ctx.font='10.5px "Segoe UI"'; ctx.textAlign='right';
+      ctx.fillText(dv+'',ml-4,y+3);
+    }
+
+    // порог приёма: медиана уровня маршрута без запаса − 10 дБ
+    let med=0; { const arr=[]; for(let i=0;i<400;i++) arr.push(this.level(i*span/400)); arr.sort((a,b)=>a-b); med=arr[200]; }
+    const TH=med-10;
+    const yTH=Y(TH);
+    ctx.strokeStyle='rgba(224,86,74,.8)'; ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.moveTo(ml,yTH); ctx.lineTo(ml+pw,yTH); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='rgba(224,86,74,.9)'; ctx.textAlign='left'; ctx.font='11px "Segoe UI"';
+    ctx.fillText('порог приёма',ml+6,yTH-5);
+
+    // кривая уровня: усреднение по столбцу — короткопериодные компоненты
+    // (быстрая рябь) на грубых масштабах усредняются, как в реальном приёмнике
+    const N=700, step=span/N;
+    const sub=Math.max(1,Math.round(step/2));
+    let below=0;
+    const Ls=[];
+    for(let i=0;i<=N;i++){
+      let s=0;
+      for(let j=0;j<sub;j++) s+=this.level(i*step+(sub>1?j*step/sub:0));
+      const L=s/sub+this.margin;
+      Ls.push([i*step,L]); if(L<TH)below++;
+    }
+    // красные зоны
+    ctx.fillStyle='rgba(224,86,74,.22)';
+    let inRed=false,startX=0;
+    for(const [x,L] of Ls){
+      if(L<TH&&!inRed){inRed=true;startX=x;}
+      if(L>=TH&&inRed){inRed=false;ctx.fillRect(X(startX),mt,X(x)-X(startX),ph);}
+    }
+    if(inRed) ctx.fillRect(X(startX),mt,X(span)-X(startX),ph);
+
+    ctx.beginPath();
+    for(let i=0;i<=N;i++){ const [x,L]=Ls[i],px=X(x),py=Y(L); i?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+    ctx.strokeStyle='#6fd3ff'; ctx.lineWidth=1.2; ctx.stroke();
+    ctx.lineTo(ml+pw,mt+ph); ctx.lineTo(ml,mt+ph); ctx.closePath();
+    ctx.fillStyle='rgba(111,211,255,.08)'; ctx.fill();
+
+    // здания в тенях (на крупных масштабах)
+    if(span>=300){
+      const dips=[];
+      for(let x=step;x<span-step;x+=step*7){
+        const s=this.slow(x);
+        if(s<-this.sigma*1.1) dips.push([x,s]);
+      }
+      dips.sort((a,b)=>a[1]-b[1]);
+      ctx.fillStyle='rgba(38,48,62,.9)';
+      for(const [x] of dips.slice(0,7)){
+        const bh=16+((x*7919)%23);
+        ctx.fillRect(X(x)-7,mt+ph-bh,14,bh);
+      }
+      ctx.fillStyle='rgba(220,232,242,.55)'; ctx.textAlign='center'; ctx.font='11px "Segoe UI"';
+      ctx.fillText('медленные замирания — тень от зданий',ml+pw/2,mt+16);
+    } else {
+      ctx.fillStyle='rgba(220,232,242,.65)'; ctx.textAlign='center'; ctx.font='11px "Segoe UI"';
+      ctx.fillText('быстрые замирания: рябь с шагом ~ λ/2 = '+fmt(3e8/(this.f*1e6)/2*100,0)+' см',ml+pw/2,mt+16);
+    }
+
+    // абонент
+    const cx=X(this.xPos);
+    ctx.strokeStyle='rgba(255,211,77,.7)'; ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.moveTo(cx,mt); ctx.lineTo(cx,mt+ph); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='#ffd34d';
+    ctx.beginPath(); ctx.arc(cx,Y(this.level(this.xPos)+this.margin),4,0,7); ctx.fill();
+
+    // подпись масштаба
+    ctx.fillStyle='rgba(220,232,242,.7)'; ctx.textAlign='left'; ctx.font='11.5px "Segoe UI"';
+    ctx.fillText('маршрут: 0 — '+(span>=1000?(span/1000)+' км':span+' м'),ml+6,mt+ph-10);
+    ctx.textAlign='right';
+    ctx.fillText('среда: '+this.preset+' · σ = '+this.sigma+' дБ',ml+pw-6,mt+ph-10);
+
+    const pct=Math.round(100*below/N);
+    setReadout('Частота: <b>'+this.f+' МГц</b> · запас на замирания: <b>'+(this.margin?'+'+fmt(this.margin,1):'0')+' дБ</b><br>'+
+      'Связи нет (ниже порога): <b style="color:'+(pct>10?'#e0564a':'#4cd97b')+'">'+pct+' % маршрута</b><br>'+
+      (pct>10?'Добавьте запас — из лекции 3: для 90 % надёжности запас ≈ 1,29·σ ≈ '+(this.sigma*1.29).toFixed(1).replace('.',',')+' дБ при σ='+this.sigma+' дБ.':'Запас достаточен: уровень держится выше порога.'));
+  },
+  controls:[
+    {type:'buttons',label:'Среда (σ медленных замираний)',options:[
+      {name:'Пригород σ=5',value:5},{name:'Город σ=8',value:8},
+      {name:'Сельская σ=11',value:11},{name:'Горы σ=18',value:18}],
+      get(){return demoFading.sigma},set(v){demoFading.sigma=v;demoFading.preset=({5:'Пригород',8:'Город',11:'Сельская',18:'Горы'})[v];}},
+    {type:'slider',label:'Частота, МГц',min:400,max:2600,step:50,get(){return demoFading.f},set(v){demoFading.f=v}},
+    {type:'slider',label:'Запас на замирания, дБ',min:0,max:20,step:0.5,get(){return demoFading.margin},set(v){demoFading.margin=v;},
+      fmt:v=>fmt(v,1)},
+    {type:'buttons',label:'Масштаб маршрута',options:[
+      {name:'50 м',value:50},{name:'300 м',value:300},{name:'2 км',value:2000},{name:'10 км',value:10000}],
+      get(){return demoFading.span},set(v){demoFading.span=v}},
+    {type:'buttons',label:'Воспроизведение',options:[{name:'▶ движение',value:1},{name:'⏸ пауза',value:0}],
+      get(){return demoFading.playing?1:0},set(v){demoFading.playing=!!v}},
+  ]
+};
+
+/* ============================ РЕЕСТР И ЗАПУСК ============================ */
+const DEMOS=[demoTwoRay,demoDiff,demoHorizon,demoIono,demoFading];
+let cur=null;
+
+const tabsBox=document.getElementById('tabs');
+DEMOS.forEach(d=>{
+  const b=document.createElement('button');
+  b.className='tab'; b.textContent=d.tab; b.dataset.id=d.id;
+  b.addEventListener('click',()=>select(d.id));
+  tabsBox.appendChild(b);
+});
+function select(id){
+  cur=DEMOS.find(d=>d.id===id);
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
+  setQBox(cur.question);
+  setDesc(cur.desc);
+  setNote(cur.note);
+  buildControls(cur.controls);
+  setReadout('');
+}
+select('twoRay');
+
+let last=performance.now();
+function loop(){
+  const now=performance.now();
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  fitCanvas();
+  ctx.fillStyle='#0b1622'; ctx.fillRect(0,0,W,H);
+  if(cur) cur.render(now/1000,dt);
+}
+loop();                       // первый кадр сразу, не дожидаясь таймера
+setInterval(loop,33);         // драйвер анимации: работает и в видимой, и в фоновой вкладке
+window.addEventListener('resize',loop);
+</script>
+</body>
+</html>

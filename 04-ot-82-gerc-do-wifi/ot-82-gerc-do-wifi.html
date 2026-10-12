@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>От 82 герц до Wi-Fi — лента масштабов радиочастот</title>
+<style>
+  :root{
+    --bg:#eef3f8; --panel:#ffffff; --line:#d7e1ec; --text:#1d3040; --dim:#5d7183;
+    --accent:#0e6ba8; --accent2:#e07a2f; --soft:#f6f9fc;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:15px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 18px 10px}
+  header{padding:22px 18px 6px;max-width:1180px;margin:0 auto}
+  header h1{margin:0;font-size:24px;font-weight:650;color:var(--text)}
+  header .sub{color:var(--dim);margin-top:4px;font-size:13.5px}
+
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 1px 4px rgba(20,45,70,.07);padding:14px 16px;margin-top:14px;
+  }
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.9px;color:var(--dim)}
+  canvas{display:block;width:100%;border-radius:10px}
+  #ruler{height:172px;cursor:ew-resize;touch-action:none}
+  #scale{height:330px}
+
+  .grid2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;align-items:start}
+
+  .bigline{display:flex;flex-wrap:wrap;gap:8px 26px;align-items:baseline;margin:2px 0 8px}
+  .bigline .f{font-size:30px;font-weight:700;color:var(--accent)}
+  .bigline .lam{font-size:22px;font-weight:600;color:var(--accent2)}
+  .bigline .band{font-size:16px;font-weight:600;color:var(--text)}
+  .bigline .band small{color:var(--dim);font-weight:400}
+
+  .ratio{font-size:14.5px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin:8px 0 12px}
+  .ratio b{color:var(--accent2)}
+
+  ul.users{list-style:none;margin:0;padding:0}
+  ul.users li{padding:7px 2px;border-bottom:1px dashed var(--line);font-size:13.5px}
+  ul.users li:last-child{border-bottom:none}
+  ul.users li b{color:var(--text)}
+  ul.users li .ltag{float:right;color:var(--accent);font-size:11.5px;background:#e7f1f8;border-radius:6px;padding:1px 7px}
+  ul.users li.near{background:#fdf6ee;border-radius:8px;padding-left:9px;padding-right:9px;border-bottom-color:transparent}
+  ul.users li.near .ltag{background:var(--accent2);color:#fff}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+  .chip{
+    background:var(--soft);border:1px solid var(--line);border-radius:16px;padding:5px 12px;
+    font-size:12.5px;cursor:pointer;color:var(--text);
+  }
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+  .chip.hot{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  .law{font-size:13.5px;color:var(--dim);margin-top:12px;line-height:1.55}
+  .law b{color:var(--text)}
+  footer{color:var(--dim);font-size:11.5px;padding:14px 18px 26px;max-width:1180px;margin:0 auto}
+  @media (max-width:900px){ .grid2{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header>
+  <h1>От 82 герц до Wi-Fi</h1>
+  <div class="sub">Лента масштабов радиочастот: тяните бегунок — и смотрите, какая волна у какой системы и с чем её сравнить по размеру · по материалам лекций 3–8, 11</div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <h2>Лента частот — потяните бегунок или кликните по диапазону</h2>
+    <canvas id="ruler"></canvas>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Длина волны в масштабе — от монеты до всей Земли</h2>
+      <canvas id="scale"></canvas>
+      <div class="bigline">
+        <span class="f" id="fBig"></span>
+        <span class="lam" id="lamBig"></span>
+        <span class="band" id="bandBig"></span>
+      </div>
+      <div class="ratio" id="ratioLine"></div>
+    </div>
+
+    <div class="card">
+      <h2>Кто здесь работает</h2>
+      <ul class="users" id="usersList"></ul>
+      <div class="law">
+        <b>Закон эфира:</b> чем ниже частота — тем дальше идёт волна и глубже она проникает в воду и землю,
+        но тем уже полоса и ниже скорость передачи. Чем выше — тем шире полоса и выше скорость,
+        но связь прижимается к прямой видимости, а волна по размерам — уже с ладонь.
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Учебный демонстратор по материалам лекций 3–8 и 11. Границы диапазонов — по классификации радиоволн;
+  системы указаны по курсу. «Зевс»: частота 82 Гц, длина волны 3656 км — сравнима с четвертью окружности Земли.
+</footer>
+
+<script>
+'use strict';
+
+/* ============================ ДАННЫЕ ============================ */
+const C=299792458;
+const FMIN=10, FMAX=30e9;                 // Гц: 10 Гц … 30 ГГц
+const BANDS=[
+  {f1:3,     f2:30,    n:'КНЧ',            col:'#c9d6ee'},
+  {f1:30,    f2:300,   n:'СНЧ',            col:'#aecdee'},
+  {f1:300,   f2:3e3,   n:'ИНЧ',            col:'#b7dcf0'},
+  {f1:3e3,   f2:30e3,  n:'ОНЧ (СДВ)',      col:'#a5e2c6'},
+  {f1:30e3,  f2:300e3, n:'ДВ',             col:'#f4e0a4'},
+  {f1:300e3, f2:3e6,   n:'СВ',             col:'#f6d49a'},
+  {f1:3e6,   f2:30e6,  n:'КВ',             col:'#f6bd8f'},
+  {f1:30e6,  f2:300e6, n:'УКВ (МВ)',       col:'#dfc0f2'},
+  {f1:300e6, f2:3e9,   n:'ДЦВ (УВЧ)',      col:'#f2b3cb'},
+  {f1:3e9,   f2:30e9,  n:'СВЧ',            col:'#c4c8f5'}
+];
+const USERS={ // «кто здесь работает» по диапазонам (из курса)
+  'КНЧ':[
+    ['Океан тишины: ниже 30 Гц передатчиков почти нет — слишком гигантские антенны','лекция 6']
+  ],
+  'СНЧ':[
+    ['«Зевс» (СССР, 82 Гц): связь с ПЛ на глубинах до 200 м на буксируемую антенну ≈1 км; скорость — 3 знака за 5–15 минут; антенна — сама Земля','лекция 6'],
+    ['«Seafarer» (США, 76 Гц) — американский аналог','лекция 6'],
+    ['Проникновение в морскую воду — сотни метров: чем ниже частота, тем глубже','лекция 6']
+  ],
+  'ИНЧ':[
+    ['Переходная зона: антенны ещё огромны, проникновение в воду — десятки метров','лекция 6']
+  ],
+  'ОНЧ (СДВ)':[
+    ['43-й узел связи под Вилейкой — мегаваттный ОНЧ-передатчик для ПЛ ВМФ; «Голиаф» (1943) работает до сих пор','лекция 6'],
+    ['Проникновение в воду — до 20 м: ПЛ на малой глубине принимает сигнал','лекция 6'],
+    ['Скорость уже выше, но антенны — километровые буксируемые кабели','лекция 6']
+  ],
+  'ДВ':[
+    ['NAVTEX 512 кГц — передача навигационных и метеопредупреждений судам','лекция 5'],
+    ['Радиомаяки и служебные передачи; поверхностная волна — сотни миль','лекция 5']
+  ],
+  'СВ':[
+    ['Морская связь: СВ-диапазон 415–535 кГц, ПВ 1605–4000 кГц','лекция 5'],
+    ['2182 кГц — частота бедствия на ПВ; связь поверхностной волной на 150–200 миль','лекция 5'],
+    ['Днём слой D поглощает — ионосферная волна КВ здесь ещё капризна','лекция 5']
+  ],
+  'КВ':[
+    ['Морская КВ 4–27,5 МГц и авиационная КВ 2,8–22 МГц: связь за горизонт через ионосферу','лекции 5, 7'],
+    ['Дневные частоты — от 8 МГц и выше, ночные — от 8 МГц и ниже (МПЧ)','лекция 5'],
+    ['Океанская дальность: один-два скачка от слоя F2 — тысячи километров','лекция 5']
+  ],
+  'УКВ (МВ)':[
+    ['Авиационная связь 118–137 МГц: диспетчер — пилот, только прямая видимость','лекция 7'],
+    ['Морской УКВ 156–174 МГц: 16-й канал (156,8 МГц) — бедствие и вызов','лекция 5'],
+    ['РЛС «Воронеж-М» — метровый диапазон: загоризонтное поле СПРН','лекция 8'],
+    ['Волна ~2 м — с человека; дальность = радиогоризонт','лекция 5']
+  ],
+  'ДЦВ (УВЧ)':[
+    ['PMR446 — 446 МГц, 0,5 Вт, 8 каналов: рации без лицензии','лекция 11'],
+    ['ТЕТРА 380–450 МГц и речная связь 300/336 МГц','лекция 11'],
+    ['GSM 900/1800 и LTE 800/1800/2600 — сотовые сети','лекция 3'],
+    ['Спутники ИНМАРСАТ и GPS — L-диапазон 1–2 ГГц','лекция 5'],
+    ['Wi-Fi 2,4 ГГц: волна 12,5 см — с ладонь; каналы шириной 20–40 МГц','лекция 4']
+  ],
+  'СВЧ':[
+    ['Wi-Fi 5 ГГц (волна 6 см) и WiMAX 1,5–11 ГГц — широкополосный доступ','лекция 4'],
+    ['Судовые РЛС и SART 9,2–9,5 ГГц: волна 3,2 см, отражение от цели','лекция 5'],
+    ['Полосы огромные, дальность — прямая видимость: город рубит эфир на кварталы','лекция 4']
+  ]
+};
+const POINTS=[ // реперные системы на ленте
+  {f:82,     n:'«Зевс» · 82 Гц'},
+  {f:21e3,   n:'43-й узел (Вилейка) · ОНЧ'},
+  {f:512e3,  n:'NAVTEX · 512 кГц'},
+  {f:2182e3, n:'2182 кГц · бедствие ПВ'},
+  {f:127e6,  n:'авиа 118–137 МГц'},
+  {f:156.8e6,n:'16-й канал · 156,8 МГц'},
+  {f:446e6,  n:'PMR446 · 446 МГц'},
+  {f:900e6,  n:'GSM · 900 МГц'},
+  {f:1.8e9,  n:'LTE · 1800 МГц'},
+  {f:2.4e9,  n:'Wi-Fi · 2,4 ГГц'},
+  {f:5.2e9,  n:'Wi-Fi 5 ГГц'},
+  {f:9.4e9,  n:'судовая РЛС · 9,4 ГГц'}
+];
+const CHIPS=[
+  {n:'«Зевс» 82 Гц',f:82},
+  {n:'ОНЧ · Вилейка',f:21e3},
+  {n:'NAVTEX 512 кГц',f:512e3},
+  {n:'бедствие 2182 кГц',f:2182e3},
+  {n:'КВ 13 МГц',f:13e6},
+  {n:'16-й канал',f:156.8e6},
+  {n:'PMR446',f:446e6},
+  {n:'GSM 900',f:900e6},
+  {n:'LTE 1800',f:1.8e9},
+  {n:'Wi-Fi 2,4',f:2.4e9},
+  {n:'Wi-Fi 5',f:5.2e9},
+  {n:'РЛС 9,4 ГГц',f:9.4e9}
+];
+const OBJECTS=[ // {L — характерный размер, м, name, kind}
+  {L:0.015, name:'монета',        kind:'coin'},
+  {L:0.17,  name:'ладонь',        kind:'palm'},
+  {L:1.7,   name:'человек',       kind:'human'},
+  {L:12,    name:'дом',           kind:'house'},
+  {L:300,   name:'судно',         kind:'ship'},
+  {L:15e3,  name:'город',         kind:'city'},
+  {L:4e6,   name:'материк',       kind:'land'},
+  {L:4.0075e7,name:'окружность Земли', kind:'earth'}
+];
+
+/* ============================ СОСТОЯНИЕ ============================ */
+let f=82; // текущая частота, Гц
+const LMIN=-2.3, LMAX=7.7; // log10 длины волны: 0,005 м … 5e7 м
+
+/* ============================ ФОРМАТИРОВАНИЕ ============================ */
+function fmtF(hz){
+  if(hz>=1e9){ const v=hz/1e9; return (v>=10?Math.round(v):v.toFixed(1).replace('.',','))+' ГГц'; }
+  if(hz>=1e6){ const v=hz/1e6; return (v>=100?Math.round(v):v.toFixed(1).replace('.',','))+' МГц'; }
+  if(hz>=1e3){ const v=hz/1e3; return (v>=100?Math.round(v):v.toFixed(1).replace('.',','))+' кГц'; }
+  return Math.round(hz)+' Гц';
+}
+function fmtL(m){
+  if(m>=1e6){ return (m/1e6).toFixed(m>=1e7?0:1).replace('.',',')+' тыс. км'; }
+  if(m>=1e3){ return (m>=1e5?Math.round(m/1e3):(m/1e3).toFixed(1).replace('.',','))+' км'; }
+  if(m>=1){ return (m>=100?Math.round(m):m.toFixed(1).replace('.',','))+' м'; }
+  if(m>=0.01){ return (m*100).toFixed(1).replace('.',',')+' см'; }
+  return Math.round(m*1000)+' мм';
+}
+function fmtBig(n){
+  const s=Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  return s;
+}
+function bandOf(hz){
+  for(const b of BANDS) if(hz>=b.f1&&hz<b.f2) return b;
+  return hz<3?BANDS[0]:BANDS[BANDS.length-1];
+}
+
+/* ============================ КАНВАСЫ ============================ */
+const ruler=document.getElementById('ruler'), rctx=ruler.getContext('2d');
+const scale=document.getElementById('scale'), sctx=scale.getContext('2d');
+function fit(cv,g){
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth,h=cv.clientHeight;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){ cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+  g.setTransform(dpr,0,0,dpr,0,0);
+  return {w,h};
+}
+const LF0=Math.log10(FMIN), LF1=Math.log10(FMAX);
+const fx=(hz,w,pad)=>pad+(Math.log10(hz)-LF0)/(LF1-LF0)*(w-2*pad);
+const lx=(L,w,pad)=>pad+(L-LMIN)/(LMAX-LMIN)*(w-2*pad);
+
+/* ---- лента частот ---- */
+function drawRuler(t){
+  const {w,h}=fit(ruler,rctx);
+  rctx.fillStyle='#ffffff';
+  rctx.fillRect(0,0,w,h);
+  rctx.clearRect(0,0,w,h);
+  rctx.fillStyle='#fbfdfe';
+  rctx.fillRect(0,0,w,h);
+  const pad=16, top=48, bandH=54;
+  // диапазоны
+  for(const b of BANDS){
+    const x1=fx(Math.max(b.f1,FMIN),w,pad), x2=fx(Math.min(b.f2,FMAX),w,pad);
+    rctx.fillStyle=b.col;
+    rctx.beginPath(); rctx.roundRect(x1+1,top,x2-x1-2,bandH,6); rctx.fill();
+    rctx.fillStyle='#2b3f52'; rctx.font='600 11px "Segoe UI"'; rctx.textAlign='center';
+    const cx2=(x1+x2)/2;
+    if(x2-x1>46) rctx.fillText(b.n,cx2,top+bandH/2+4);
+    else if(x2-x1>18){
+      rctx.save(); rctx.translate(cx2,top+bandH/2+4); rctx.rotate(-Math.PI/2);
+      rctx.font='600 9px "Segoe UI"'; rctx.fillText(b.n,0,3); rctx.restore();
+    }
+  }
+  // деления десятичных
+  rctx.fillStyle='#5d7183'; rctx.font='10.5px "Segoe UI"'; rctx.textAlign='center';
+  for(let e=1;e<=10;e++){
+    const x=fx(Math.pow(10,e),w,pad);
+    rctx.strokeStyle='rgba(29,48,64,.3)';
+    rctx.beginPath(); rctx.moveTo(x,top+bandH); rctx.lineTo(x,top+bandH+5); rctx.stroke();
+    rctx.fillText(fmtF(Math.pow(10,e)),x,top+bandH+18);
+  }
+  // реперные системы: жадная раскладка подписей по трём рядам
+  rctx.font='9.5px "Segoe UI"';
+  {
+    const rows=[-999,-999,-999];   // правый край последней подписи в каждом ряду
+    const pts=POINTS.map(p=>({p, x:fx(p.f,w,pad), wLab:p.n.split(' ·')[0].length*4.7+8}))
+                    .sort((a,b)=>a.x-b.x);
+    for(const it of pts){
+      let row=0;
+      for(let r=0;r<3;r++){ if(it.x-it.wLab/2 > rows[r]+6){ row=r; break; } row=2; }
+      const ty=row*15;
+      rctx.strokeStyle='rgba(14,107,168,.55)';
+      rctx.beginPath(); rctx.moveTo(it.x,ty+11); rctx.lineTo(it.x,top-2); rctx.stroke();
+      rctx.fillStyle='rgba(14,107,168,.9)';
+      rctx.textAlign='center';
+      rctx.fillText(it.p.n.split(' ·')[0],it.x,ty+8);
+      rows[row]=it.x+it.wLab/2;
+    }
+  }
+  // бегунок
+  const x=fx(f,w,pad);
+  rctx.strokeStyle='#e07a2f'; rctx.lineWidth=2.5;
+  rctx.beginPath(); rctx.moveTo(x,top-4); rctx.lineTo(x,top+bandH+8); rctx.stroke();
+  rctx.fillStyle='#e07a2f';
+  rctx.beginPath(); rctx.arc(x,top-4,6,0,Math.PI*2); rctx.fill();
+  rctx.lineWidth=1;
+  rctx.fillStyle='rgba(224,122,47,.9)'; rctx.textAlign='center'; rctx.font='600 11px "Segoe UI"';
+  rctx.fillText(fmtF(f),x,top+bandH+30);
+}
+
+/* ---- масштаб волны ---- */
+function drawScale(t){
+  const {w,h}=fit(scale,sctx);
+  sctx.fillStyle='#fbfdfe';
+  sctx.fillRect(0,0,w,h);
+  const pad=20, axisY=h-52, top=16;
+  const lam=C/f, Llam=Math.log10(lam);
+
+  // сетка десятичных длин
+  sctx.font='10.5px "Segoe UI"';
+  for(let e=-2;e<=7;e++){
+    const x=lx(e,w,pad);
+    sctx.strokeStyle='rgba(29,48,64,.14)';
+    sctx.beginPath(); sctx.moveTo(x,top); sctx.lineTo(x,axisY+8); sctx.stroke();
+    sctx.fillStyle='#5d7183'; sctx.textAlign='center';
+    const lbl=['1 см','10 см','1 м','10 м','100 м','1 км','10 км','100 км','1000 км','10 тыс. км'][e+2];
+    if(lbl) sctx.fillText(lbl,x,axisY+22);
+  }
+  sctx.strokeStyle='rgba(29,48,64,.45)';
+  sctx.beginPath(); sctx.moveTo(pad,axisY); sctx.lineTo(w-pad,axisY); sctx.stroke();
+  sctx.fillStyle='#5d7183'; sctx.textAlign='right';
+  sctx.fillText('размер →',w-pad-4,axisY+34);
+
+  // объекты
+  sctx.strokeStyle='rgba(29,48,64,.25)';
+  OBJECTS.forEach((o,i)=>{
+    const x=lx(Math.log10(o.L),w,pad);
+    sctx.setLineDash([2,4]);
+    sctx.beginPath(); sctx.moveTo(x,axisY-4); sctx.lineTo(x,axisY-46); sctx.stroke();
+    sctx.setLineDash([]);
+    drawObj(o.kind,x,axisY-50,Math.min(46,(axisY-60)));
+    sctx.fillStyle='#3d5064'; sctx.font='10.5px "Segoe UI"';
+    if(o.kind==='earth'){
+      // «Земля» — справочный ориентир: подпись в правом верхнем углу с выноской
+      sctx.fillStyle='#0e6ba8'; sctx.textAlign='right'; sctx.font='600 10.5px "Segoe UI"';
+      sctx.fillText('окружность Земли ≈ 40 075 км',w-pad,top+10);
+      sctx.strokeStyle='rgba(14,107,168,.45)'; sctx.setLineDash([3,4]);
+      sctx.beginPath(); sctx.moveTo(w-pad-90,top+14); sctx.lineTo(x,axisY-96); sctx.stroke();
+      sctx.setLineDash([]);
+    }
+    else if(x<pad+40){ sctx.textAlign='left'; sctx.fillStyle='#3d5064'; sctx.fillText(o.name,pad,axisY-58); }
+    else { sctx.textAlign='center'; sctx.fillStyle='#3d5064'; sctx.fillText(o.name,x,axisY-58); }
+  });
+
+  // волна: маркер λ с живым синусом
+  const xm=lx(Llam,w,pad);
+  const pulse=3+Math.sin(t*2.2)*1.5;
+  const barW=Math.min(240,Math.max(60,(Llam-LMIN)/(LMAX-LMIN)*w*0.55,2*(xm-pad)+8));
+  sctx.strokeStyle='rgba(224,122,47,.85)'; sctx.lineWidth=2.2;
+  sctx.beginPath();
+  const waves=3, amp=11, cy2=top+96;
+  for(let i=0;i<=120;i++){
+    const px=xm-barW/2+barW*i/120;
+    const py=cy2+amp*Math.sin(i/120*waves*2*Math.PI+t*2.2);
+    i?sctx.lineTo(px,py):sctx.moveTo(px,py);
+  }
+  sctx.stroke(); sctx.lineWidth=1;
+  sctx.strokeStyle='rgba(224,122,47,.5)'; sctx.setLineDash([4,4]);
+  sctx.beginPath(); sctx.moveTo(xm-barW/2,cy2); sctx.lineTo(xm+barW/2,cy2); sctx.stroke();
+  sctx.setLineDash([]);
+  sctx.fillStyle='#e07a2f';
+  sctx.beginPath(); sctx.arc(xm,cy2,pulse,0,Math.PI*2); sctx.fill();
+  // вертикаль до оси
+  sctx.strokeStyle='rgba(224,122,47,.7)'; sctx.setLineDash([3,3]);
+  sctx.beginPath(); sctx.moveTo(xm,cy2+16); sctx.lineTo(xm,axisY); sctx.stroke();
+  sctx.setLineDash([]);
+  sctx.fillStyle='#e07a2f'; sctx.textAlign='center'; sctx.font='600 12px "Segoe UI"';
+  sctx.fillText('λ = '+fmtL(lam),Math.min(Math.max(xm,60),w-60),cy2-24);
+}
+
+/* ---- пиктограммы объектов ---- */
+function drawObj(kind,x,y,s){
+  s=s||40;
+  const g=sctx; g.strokeStyle='#41586e'; g.fillStyle='#7d93a8'; g.lineWidth=1.6;
+  if(kind==='coin'){ g.beginPath(); g.arc(x,y-s/2,s*0.16,0,7); g.stroke(); }
+  else if(kind==='palm'){
+    g.beginPath(); g.roundRect(x-s*0.14,y-s*0.42,s*0.28,s*0.42,3); g.stroke();
+  }
+  else if(kind==='human'){
+    g.beginPath(); g.arc(x,y-s*0.82,s*0.10,0,7); g.stroke();
+    g.beginPath(); g.moveTo(x,y-s*0.70); g.lineTo(x,y-s*0.28); g.stroke();
+    g.beginPath(); g.moveTo(x,y-s*0.28); g.lineTo(x-s*0.09,y); g.moveTo(x,y-s*0.28); g.lineTo(x+s*0.09,y); g.stroke();
+    g.beginPath(); g.moveTo(x-s*0.11,y-s*0.60); g.lineTo(x+s*0.11,y-s*0.60); g.stroke();
+  }
+  else if(kind==='house'){
+    g.beginPath(); g.rect(x-s*0.20,y-s*0.42,s*0.40,s*0.42); g.stroke();
+    g.beginPath(); g.moveTo(x-s*0.26,y-s*0.42); g.lineTo(x,y-s*0.68); g.lineTo(x+s*0.26,y-s*0.42); g.closePath(); g.stroke();
+  }
+  else if(kind==='ship'){
+    g.beginPath(); g.moveTo(x-s*0.34,y-s*0.16); g.lineTo(x+s*0.34,y-s*0.16); g.lineTo(x+s*0.20,y); g.lineTo(x-s*0.20,y); g.closePath(); g.stroke();
+    g.beginPath(); g.rect(x-s*0.06,y-s*0.30,s*0.14,s*0.14); g.stroke();
+    g.beginPath(); g.moveTo(x,y-s*0.30); g.lineTo(x,y-s*0.44); g.stroke();
+  }
+  else if(kind==='city'){
+    const hs=[0.42,0.62,0.34,0.5];
+    hs.forEach((hh,i)=>{
+      const bx=x-s*0.30+i*s*0.17;
+      g.beginPath(); g.rect(bx,y-s*hh,s*0.13,s*hh); g.stroke();
+    });
+  }
+  else if(kind==='land'){
+    g.beginPath();
+    g.ellipse(x,y-s*0.26,s*0.36,s*0.26,0.4,0,7); g.stroke();
+  }
+  else if(kind==='earth'){
+    g.beginPath(); g.arc(x,y-s*0.30,s*0.30,0,7); g.stroke();
+    g.beginPath(); g.ellipse(x,y-s*0.30,s*0.13,s*0.30,0,0,7); g.stroke();
+    g.beginPath(); g.moveTo(x-s*0.30,y-s*0.30); g.lineTo(x+s*0.30,y-s*0.30); g.stroke();
+  }
+}
+
+/* ============================ ПАНЕЛИ ============================ */
+const fBig=document.getElementById('fBig'), lamBig=document.getElementById('lamBig'),
+      bandBig=document.getElementById('bandBig'), ratioLine=document.getElementById('ratioLine'),
+      usersList=document.getElementById('usersList'), chipsBox=document.getElementById('chips');
+
+function updatePanels(){
+  const lam=C/f, b=bandOf(f);
+  fBig.textContent=fmtF(f);
+  lamBig.textContent='λ = '+fmtL(lam);
+  bandBig.innerHTML=b.n+' <small>— диапазон текущей частоты</small>';
+  // сравнение с человеком (1,7 м)
+  const HUMAN=1.7;
+  if(lam>=HUMAN){
+    ratioLine.innerHTML='Волна <b>'+fmtL(lam)+'</b> — длиннее человека в <b>'+fmtBig(lam/HUMAN)+
+      (lam>1e3?' раз</b>. Такая волна «накрывает» целые страны — и потому уходит за горизонт и в глубину воды.':' раз</b>.');
+  }else{
+    ratioLine.innerHTML='Волна <b>'+fmtL(lam)+'</b> — короче человека в <b>'+fmtBig(HUMAN/lam)+
+      ' раз</b>. Мелкая волна умещается в антенну с ладонь — за то и платим узостью дальности.';
+  }
+  // список систем
+  const items=USERS[b.n]||[];
+  const near=POINTS.reduce((a,p)=>Math.abs(Math.log10(p.f/f))<Math.abs(Math.log10(a.f/f))?p:a,POINTS[0]);
+  let html='';
+  for(const [txt,tag] of items) html+='<li>'+txt+'<span class="ltag">'+tag+'</span></li>';
+  html+='<li class="near">Сейчас на частоте <b>'+fmtF(f)+'</b> ближайшая система курса: <b>'+near.n+'</b><span class="ltag">репер</span></li>';
+  usersList.innerHTML=html;
+  // чипы
+  [...chipsBox.children].forEach(ch=>{
+    ch.classList.toggle('hot',Math.abs(Math.log10(+ch.dataset.f/f))<0.02);
+  });
+}
+
+/* чипы */
+CHIPS.forEach(c=>{
+  const b=document.createElement('button');
+  b.className='chip'; b.textContent=c.n; b.dataset.f=c.f;
+  b.addEventListener('click',()=>{ f=c.f; updatePanels(); });
+  chipsBox.appendChild(b);
+});
+
+/* перетаскивание бегунка */
+let drag=false;
+function setFromEvent(e){
+  const r=ruler.getBoundingClientRect(), pad=16;
+  const x=e.clientX-r.left;
+  const v=LF0+(x-pad)/(r.width-2*pad)*(LF1-LF0);
+  f=Math.pow(10,Math.min(LF1,Math.max(LF0,v)));
+  updatePanels();
+}
+ruler.addEventListener('pointerdown',e=>{ drag=true; ruler.setPointerCapture(e.pointerId); setFromEvent(e); });
+ruler.addEventListener('pointermove',e=>{ if(drag) setFromEvent(e); });
+ruler.addEventListener('pointerup',()=>drag=false);
+
+/* ============================ ЦИКЛ ============================ */
+let last=performance.now();
+function frame(){
+  const t=performance.now()/1000;
+  drawRuler(t);
+  drawScale(t);
+}
+frame();
+setInterval(frame,40);
+window.addEventListener('resize',frame);
+updatePanels();
+</script>
+</body>
+</html>

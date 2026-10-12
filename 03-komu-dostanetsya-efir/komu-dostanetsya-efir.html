@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кому достанется эфир — FDMA / TDMA / CDMA / OFDMA</title>
+<style>
+  :root{
+    --bg:#0b1622; --panel:#101f30; --panel2:#0d1a2a;
+    --line:#1d3350; --text:#dce8f2; --dim:#8fa3b8; --accent:#6fd3ff; --ok:#4cd97b; --warn:#ffd34d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+  header{padding:16px 22px 8px}
+  header h1{margin:0;font-size:21px;font-weight:600}
+  header .sub{color:var(--dim);margin-top:3px;font-size:13px}
+
+  .tabs{display:flex;gap:8px;padding:4px 22px 0;flex-wrap:wrap}
+  .tab{
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px 10px 0 0;
+    padding:9px 16px;color:var(--text);cursor:pointer;font-size:13.5px;font-weight:600;
+  }
+  .tab:hover{border-color:#2c4a70}
+  .tab.active{background:#12263c;border-color:var(--accent);color:var(--accent)}
+
+  .layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;padding:0 22px 10px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:0 12px 12px 12px;padding:14px}
+  .panel h2{margin:2px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim)}
+  .panel h2:not(:first-child){margin-top:16px}
+
+  .question{border:1px solid #7a6420;background:#1c1810;border-radius:10px;padding:10px 12px;margin-bottom:4px}
+  .question .q-tag{color:var(--warn);font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700}
+  .question .q-text{font-size:13px;margin-top:3px;line-height:1.45}
+  .desc{font-size:12.5px;color:var(--dim);margin:8px 0 2px;line-height:1.5}
+
+  .ctl{margin:10px 0}
+  .ctl label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .ctl label b{color:var(--accent);font-weight:600}
+  input[type=range]{width:100%;accent-color:#4aa8d8}
+  .btn-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 11px;color:var(--text);cursor:pointer;font-size:12.5px}
+  .btn:hover{border-color:#2c4a70}
+  .btn.active{border-color:var(--accent);color:var(--accent);background:#12263c}
+  .chk{display:flex;gap:8px;align-items:center;font-size:13px;margin:8px 0;cursor:pointer}
+  .note{font-size:11.5px;color:var(--dim);margin-top:6px;line-height:1.45}
+  .readout{margin:10px 0;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);font-size:12.5px;line-height:1.55}
+  .readout b{color:var(--accent)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{
+    display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:14px;cursor:pointer;
+    border:1px solid var(--line);background:var(--panel2);font-size:12px;user-select:none;
+  }
+  .chip .dot{width:9px;height:9px;border-radius:50%}
+  .chip.talk{border-color:var(--accent);background:#12263c}
+  .chip.blocked{border-color:#e0564a;background:#2a1310;color:#f6c8c2}
+  .chip .st{color:var(--dim);font-size:10.5px}
+  .chip.blocked .st{color:#e0564a}
+
+  .canvas-wrap{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;min-width:0}
+  #stage{width:100%;height:600px;display:block;border-radius:8px}
+
+  .cmp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .cmp h2{margin:0 0 10px;font-size:14px}
+  .cmp table{border-collapse:collapse;width:100%;font-size:12.5px}
+  .cmp th,.cmp td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  .cmp th{background:var(--panel2);color:var(--accent);font-size:12.5px}
+  .cmp td:first-child{color:var(--dim);width:170px}
+  .cmp .mode-name{color:var(--text);font-weight:600}
+
+  footer{color:var(--dim);font-size:11.5px;padding:8px 22px 24px}
+  @media (max-width:1000px){ .layout{grid-template-columns:1fr} #stage{height:440px} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Кому достанется эфир</h1>
+  <div class="sub">Четыре способа разделить радиоэфир между абонентами: FDMA · TDMA · CDMA · OFDMA · по материалам лекций 2, 4 и 11</div>
+</header>
+
+<div class="tabs" id="tabs"></div>
+
+<main class="layout">
+  <aside class="panel" id="sidePanel">
+    <div id="qbox" class="question"></div>
+    <div id="desc" class="desc"></div>
+
+    <h2>Абоненты <span style="text-transform:none;letter-spacing:0">(клик — говорить/молчать)</span></h2>
+    <div class="chips" id="chips"></div>
+    <div class="btn-row">
+      <button class="btn" id="addBtn">+ абонент</button>
+      <button class="btn" id="delBtn">− абонент</button>
+    </div>
+
+    <h2>Управление</h2>
+    <label class="chk"><input type="checkbox" id="autoChk" checked> автоактивность — разговоры включаются сами, как в телефонной речи</label>
+    <div class="ctl">
+      <label>Речевая активность <b id="actVal"></b></label>
+      <input type="range" id="actSlider" min="10" max="90" step="5">
+    </div>
+    <div class="ctl" id="capCtl" style="display:none">
+      <label>Ёмкость эфира — одновременных передач без ошибок <b id="capVal"></b></label>
+      <input type="range" id="capSlider" min="1" max="8" step="1">
+    </div>
+    <div class="ctl">
+      <label>Пауза между тактами <b id="spdVal"></b></label>
+      <input type="range" id="spdSlider" min="120" max="900" step="30">
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="playBtn">▶ эфир</button>
+      <button class="btn" id="resetBtn">⟲ сброс</button>
+    </div>
+
+    <h2>Что происходит</h2>
+    <div id="readout" class="readout"></div>
+    <h2>Итог</h2>
+    <div id="summary" class="note"></div>
+  </aside>
+
+  <section>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="stage"></canvas>
+    </div>
+    <div class="cmp" id="cmpBox" style="display:none">
+      <h2>Четыре способа — одной таблицей</h2>
+      <table id="cmpTable"></table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Учебный демонстратор по материалам лекций 2, 4 и 11. Модель наглядная: 8 ресурсных единиц эфира,
+  случайные разговоры — не модель реальной соты. Связь темы с лекцией 11: транкинговые системы существуют
+  именно потому, что FDMA с закреплёнными каналами транит эфир молчащих абонентов.
+</footer>
+
+<script>
+'use strict';
+
+/* ============================ СОСТОЯНИЕ ============================ */
+const UCOL=['#6fd3ff','#ffd34d','#4cd97b','#ff9a62','#e07ae0','#7b9bff','#ff6f91','#5fe3c0','#c8ff5f','#ffb85f'];
+const st={
+  mode:'fdma',
+  users:[],            // {id, name, color, speaking, left}
+  nextId:1,
+  cols:[],             // история тактов
+  t:0,
+  playing:true,
+  auto:true,
+  activity:0.4,
+  speed:450,
+  cdmaCap:4,
+  blockedTicks:0,
+};
+const MAXUSERS=10;
+function addUser(){
+  if(st.users.length>=MAXUSERS) return;
+  const id=st.nextId++;
+  st.users.push({id,name:'Абонент '+id,color:UCOL[(id-1)%UCOL.length],speaking:Math.random()<st.activity,left:4+Math.floor(Math.random()*10),pattern:makePattern(id)});
+  syncChips();
+}
+function makePattern(id){
+  const p=[]; let x=(id*2654435761)>>>0;
+  for(let r=0;r<12;r++){ x=(x*1103515245+12345)>>>0; p.push((x>>>16)%2===1); }
+  return p;
+}
+
+/* ============================ ТАКТ ЭФИРА ============================ */
+const MAXCOLS=84;
+function rowsCount(){ return Math.max(8,st.users.length); }
+function tick(prefill){
+  st.t++;
+  const rows=rowsCount();
+  const col={cells:[],bands:null,blocked:[],overload:0,slotUser:null};
+  if(st.mode==='fdma'){
+    st.users.forEach((u,i)=>{
+      if(i<8) col.cells.push({row:i,u,kind:u.speaking?'tx':'waste'});
+      else col.blocked.push(u);
+    });
+    for(let r=st.users.length;r<rows;r++) col.cells.push({row:r,kind:'free'});
+    if(col.blocked.length&&!prefill) st.blockedTicks++;
+  }
+  else if(st.mode==='tdma'){
+    const slots=rows, si=st.t%slots;
+    const u=st.users[si]||null;
+    col.slotUser=u;
+    if(u) col.bands=[{u,kind:u.speaking?'tx':'waste'}];
+  }
+  else if(st.mode==='cdma'){
+    const talkers=st.users.filter(u=>u.speaking);
+    col.bands=talkers.map(u=>({u,kind:'tx'}));
+    if(talkers.length>st.cdmaCap) col.overload=(talkers.length-st.cdmaCap)/talkers.length;
+  }
+  else{ // ofdma
+    const act=st.users.filter(u=>u.speaking);
+    if(act.length===0){ for(let r=0;r<rows;r++) col.cells.push({row:r,kind:'free'}); }
+    else{
+      const base=Math.floor(rows/act.length); let extra=rows%act.length, r0=0;
+      act.forEach(u=>{ const n=base+(extra-->0?1:0); for(let k=0;k<n;k++) col.cells.push({row:r0,u,kind:'tx'}); r0+=n; });
+    }
+  }
+  st.cols.push(col);
+  if(st.cols.length>MAXCOLS) st.cols.shift();
+  // автоактивность
+  if(st.auto){
+    st.users.forEach(u=>{
+      if(--u.left<=0){ u.speaking=Math.random()<st.activity; u.left=4+Math.floor(Math.random()*10); }
+    });
+  }
+  syncChipStates();
+}
+
+/* ============================ РЕЖИМЫ ============================ */
+const MODES={
+  fdma:{
+    tab:'FDMA',
+    question:'Восемь частотных каналов, а абонентов девять. Что получит девятый — и почему транкинговые системы (лекция 11) именно это и лечат?',
+    desc:'Каждому абоненту выделяется СВОЙ частотный канал на всё время связи — даже когда он молчит. Классика первого поколения аналоговой сотовой связи.',
+    yTitle:'частотные каналы',
+    summary:'<b>Принцип:</b> разделение по частоте, канал закреплён за абонентом.<br>'+
+      '<b>Слабое место:</b> молчащий абонент держит канал впустую; лишний абонент получает отказ.<br>'+
+      '<b>Где применялось:</b> аналоговая сотовая связь 1G (NMT, AMPS).<br>'+
+      '<b>Связь с курсом:</b> в лекции 11 — «системы с закреплёнными каналами».',
+    readout(c){
+      let tx=0,waste=0,total=0;
+      for(const col of st.cols){ for(const cl of col.cells){ total++; if(cl.kind==='tx')tx++; if(cl.kind==='waste')waste++; } }
+      const busy=total?Math.round(100*(tx+waste)/total):0;
+      return 'Каналов: <b>8</b> · абонентов: <b>'+st.users.length+'</b>'+
+        (st.users.length>8?' · <b style="color:#e0564a">ОТКАЗ: '+(st.users.length-8)+' аб. без канала</b>':'')+
+        '<br>Эфир занят: <b>'+busy+' %</b>, из них впустую (молчат): <b>'+(tx+waste?Math.round(100*waste/(tx+waste)):0)+' %</b><br>'+
+        'Тактов с отказом: <b>'+st.blockedTicks+'</b>';
+    }
+  },
+  tdma:{
+    tab:'TDMA',
+    question:'Абонентов восемь, слотов восемь. Сколько тактов придётся ждать абоненту после окончания чужого разговора?',
+    desc:'Весь эфир целиком отдаётся одному абоненту, но лишь на короткий свой слот времени. Все слушают «свою» очередь — так работает GSM.',
+    yTitle:'слоты = весь эфир',
+    summary:'<b>Принцип:</b> разделение по времени, весь эфир в свой слот.<br>'+
+      '<b>Слабое место:</b> слот молчащего абонента тоже пропадает; растёт задержка доступа.<br>'+
+      '<b>Где применяется:</b> GSM (2G), которое дало сотам ёмкость втрое выше FDMA при тех же частотах.<br>'+
+      '<b>Связь с курсом:</b> лекция 3 — 2G: полоса 200 кГц.',
+    readout(c){
+      let tx=0,waste=0;
+      for(const col of st.cols){ if(!col.bands) continue; if(col.bands[0].kind==='tx')tx++; else waste++; }
+      const total=tx+waste;
+      return 'Слотов: <b>'+rowsCount()+'</b> · говорит в такте: <b>только один</b><br>'+
+        'Слотов потеряно из-за молчания: <b>'+(total?Math.round(100*waste/total):0)+' %</b><br>'+
+        'Ожидание своего слота: до <b>'+rowsCount()+' тактов</b>';
+    }
+  },
+  cdma:{
+    tab:'CDMA',
+    question:'Все говорят одновременно и на одной частоте — почему они не мешают друг другу? И что случится, если говорить будут слишком многие?',
+    desc:'Каждому абоненту — свой шумоподобный код. Все передают одновременно на всей полосе; приёмник «вытягивает» нужный код из суммы сигналов. Так работают 3G и GPS.',
+    yTitle:'коды',
+    summary:'<b>Принцип:</b> разделение по кодам, все передают одновременно на всей полосе.<br>'+
+      '<b>Слабое место:</b> каждый новый говорящий — помеха всем: ёмкость «мягкая», качество плавно падает.<br>'+
+      '<b>Где применяется:</b> 3G (UMTS, CDMA2000), GPS.<br>'+
+      '<b>Связь с курсом:</b> лекция 7 — помехоустойчивость CDMA для военной СВЧ-связи.',
+    readout(c){
+      const k=st.users.filter(u=>u.speaking).length;
+      let corr=0,cells=0;
+      for(const col of st.cols){ cells+=8; corr+=Math.round((col.overload||0)*8); }
+      return 'Говорят сейчас: <b>'+k+'</b> · ёмкость эфира: <b>'+st.cdmaCap+'</b><br>'+
+        'Бит повреждено взаимными помехами: <b style="color:'+(corr?'#e0564a':'#4cd97b')+'">'+(cells?Math.round(100*corr/cells):0)+' %</b><br>'+
+        (k>st.cdmaCap?'<b style="color:#e0564a">Перегрузка: убавьте говорящих или поднимите ёмкость</b>':'Эфир не тратится на молчащих: у них просто нет кода в эфире');
+    }
+  },
+  ofdma:{
+    tab:'OFDMA',
+    question:'Почему LTE отдаёт эфир ровно тем, кому он нужен прямо сейчас, и не даёт его молчащим?',
+    desc:'Эфир нарезан на ресурсные блоки «поднесущие × такты». Планировщик каждую миллисекунду раздаёт блоки только активным абонентам — по потребности. Так работают LTE, WiMAX и Wi-Fi 6.',
+    yTitle:'поднесущие (РБ)',
+    summary:'<b>Принцип:</b> разделение по частоте И времени, ресурсы выдаются по требованию.<br>'+
+      '<b>Слабое место:</b> нужен сложный планировщик и точная синхронизация (лекция 4: OFDM чувствителен к доплеру).<br>'+
+      '<b>Где применяется:</b> LTE (4G), WiMAX (IEEE 802.16), Wi-Fi 6.<br>'+
+      '<b>Связь с курсом:</b> лекция 4 — OFDMA в стандарте IEEE 802.16e.',
+    readout(c){
+      let tx=0,total=0;
+      for(const col of st.cols){ for(const cl of col.cells){ total++; if(cl.kind==='tx')tx++; } }
+      const k=st.users.filter(u=>u.speaking).length;
+      return 'Ресурсных блоков: <b>'+rowsCount()+'</b> · говорят: <b>'+k+'</b><br>'+
+        'Блоков отдано активным: <b>'+(total?Math.round(100*tx/total):0)+' %</b>, на молчащих не потрачено: <b>0</b><br>'+
+        (k? 'Активный сейчас получает: <b>'+Math.floor(rowsCount()/Math.max(k,1))+' РБ</b>' : 'Эфир свободен целиком — никто не говорит');
+    }
+  }
+};
+
+const CMP_ROWS=[
+  ['Разделение эфира','свой частотный канал каждому','весь эфир, но свой слот времени','все вместе, у каждого свой код','ресурсные блоки «поднесущие × такты» по требованию'],
+  ['Молчащий абонент','канал простаивает впустую','слот пропадает','эфир не тратится','эфир не тратится'],
+  ['Перегрузка','отказ: свободных каналов нет','растёт задержка доступа','взаимные помехи растут, биты гибнут','планировщик делит блоки, скорость падает плавно'],
+  ['Типичная система','аналоговый 1G (NMT, AMPS)','GSM (2G)','3G (UMTS, CDMA2000), GPS','LTE (4G), WiMAX, Wi-Fi 6'],
+  ['В курсе','лекция 11: закреплённые каналы','лекция 3: 2G, 200 кГц','лекция 7: CDMA в военной связи','лекция 4: OFDMA в IEEE 802.16'],
+];
+
+/* ============================ КАНВАС ============================ */
+const cv=document.getElementById('stage');
+const ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1;
+function fitCanvas(){
+  DPR=window.devicePixelRatio||1;
+  const w=cv.clientWidth,h=cv.clientHeight;
+  if(w<10||h<10) return;
+  if(cv.width!==Math.round(w*DPR)||cv.height!==Math.round(h*DPR)){ cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR); }
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  W=w;H=h;
+}
+function hexA(hex,a){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function draw(){
+  const M=MODES[st.mode];
+  if(st.mode==='cmp') return;
+  fitCanvas();
+  ctx.fillStyle='#0b1622'; ctx.fillRect(0,0,W,H);
+  const ml=64,mr=14,mt=(st.users.length>8&&st.mode==='fdma')?48:14,mb=30;
+  const pw=W-ml-mr, ph=H-mt-mb;
+  const rows=rowsCount();
+  const cw=pw/MAXCOLS, rh=ph/rows;
+  const X=c=>ml+c*cw, Y=r=>mt+r*rh;
+
+  // заголовок такта — всегда над схемой
+  ctx.fillStyle='rgba(220,232,242,.85)'; ctx.textAlign='left'; ctx.font='12.5px "Segoe UI"';
+  let head='';
+  if(st.mode==='fdma') head='FDMA: канал закреплён, молчание = потерянный канал';
+  if(st.mode==='tdma') head='TDMA: весь эфир — одному, но только в свой слот';
+  if(st.mode==='cdma') head='CDMA: все вместе, у каждого свой код';
+  if(st.mode==='ofdma') head='OFDMA: планировщик раздаёт ресурсные блоки по требованию';
+  ctx.fillText(head,ml,12);
+
+  // полоса отказов (FDMA)
+  if(st.mode==='fdma'&&st.users.length>8){
+    const names=st.users.slice(8).map(u=>u.name).join(', ');
+    ctx.fillStyle='rgba(224,86,74,.16)'; ctx.fillRect(ml,mt-30,pw,26);
+    ctx.strokeStyle='#e0564a'; ctx.strokeRect(ml+.5,mt-29.5,pw-1,25);
+    ctx.fillStyle='#f6c8c2'; ctx.font='12px "Segoe UI"'; ctx.textAlign='left';
+    ctx.fillText('ОТКАЗ — свободных каналов нет: '+names,ml+10,mt-13);
+  }
+
+  // фон сетки
+  ctx.fillStyle='#0d1a2a'; ctx.fillRect(ml,mt,pw,ph);
+  ctx.strokeStyle='rgba(255,255,255,.07)';
+  for(let r=1;r<rows;r++){ ctx.beginPath(); ctx.moveTo(ml,Y(r)); ctx.lineTo(ml+pw,Y(r)); ctx.stroke(); }
+  for(let c=0;c<MAXCOLS;c+=10){ ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.beginPath(); ctx.moveTo(X(c),mt); ctx.lineTo(X(c),mt+ph); ctx.stroke(); }
+
+  // история тактов
+  const off=MAXCOLS-st.cols.length;
+  st.cols.forEach((col,ci)=>{
+    const c=ci+off, x=X(c);
+    if(st.mode==='cdma'){
+      if(col.bands){
+        // каждый говорящий занимает всю полосу: полупрозрачная полоса + свой кодовый пунктир
+        col.bands.forEach(b=>{
+          ctx.fillStyle=hexA(b.u.color,0.13);
+          ctx.fillRect(x+0.5,mt+0.5,cw-1,ph-1);
+        });
+        col.bands.forEach(b=>{
+          for(let r=0;r<8;r++){
+            const strong=b.u.pattern[r%12];
+            ctx.fillStyle=hexA(b.u.color,strong?0.5:0.10);
+            ctx.fillRect(x+0.5,Y(r)+0.5,cw-1,rh-1);
+          }
+        });
+        if(col.overload>0){
+          const nBad=Math.round(col.overload*8);
+          for(let k=0;k<nBad;k++){
+            const r=Math.floor(Math.random()*8);
+            ctx.fillStyle='rgba(224,86,74,.85)';
+            ctx.fillRect(x+0.5,Y(r)+0.5,cw-1,rh-1);
+          }
+        }
+      }
+    } else {
+      for(const cl of col.cells){
+        const px=x+0.5, py=Y(cl.row)+0.5, w2=cw-1, h2=rh-1;
+        if(cl.kind==='tx'){ ctx.fillStyle=hexA(cl.u.color,0.92); ctx.fillRect(px,py,w2,h2); }
+        else if(cl.kind==='waste'){
+          ctx.fillStyle=hexA(cl.u.color,0.16); ctx.fillRect(px,py,w2,h2);
+          ctx.strokeStyle=hexA(cl.u.color,0.45); ctx.lineWidth=1;
+          ctx.beginPath();
+          ctx.moveTo(px+1,py+h2-2); ctx.lineTo(px+Math.min(5,w2/3),py+1);
+          ctx.moveTo(px+w2/2,py+h2-2); ctx.lineTo(px+w2/2+Math.min(4,w2/3),py+1);
+          ctx.stroke();
+        } else { ctx.fillStyle='rgba(255,255,255,.035)'; ctx.fillRect(px,py,w2,h2); }
+      }
+      if(st.mode==='tdma'&&col.bands){
+        ctx.fillStyle=hexA(col.bands[0].u.color,col.bands[0].kind==='tx'?0.85:0.14);
+        ctx.fillRect(x+0.5,mt+0.5,cw-1,ph-1);
+        if(col.bands[0].kind==='waste'){
+          ctx.fillStyle='rgba(220,232,242,.5)'; ctx.font='9px "Segoe UI"'; ctx.textAlign='center';
+          if(cw>15) ctx.fillText('молчит',x+cw/2,mt+rh/2);
+        }
+      }
+    }
+  });
+
+  // текущий такт
+  ctx.strokeStyle='rgba(255,255,255,.65)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(X(MAXCOLS-1)-1,mt); ctx.lineTo(X(MAXCOLS-1)-1,mt+ph); ctx.stroke(); ctx.lineWidth=1;
+
+  // подписи оси Y
+  ctx.fillStyle='rgba(220,232,242,.6)'; ctx.font='10.5px "Segoe UI"'; ctx.textAlign='right';
+  for(let r=0;r<rows;r++) ctx.fillText(String(r+1),ml-6,Y(r)+rh/2+3);
+  ctx.save();
+  ctx.translate(14,mt+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.fillStyle='rgba(220,232,242,.75)'; ctx.font='11.5px "Segoe UI"';
+  ctx.fillText(M.yTitle,0,0);
+  ctx.restore();
+
+  // ось времени
+  ctx.fillStyle='rgba(220,232,242,.6)'; ctx.textAlign='center'; ctx.font='10.5px "Segoe UI"';
+  for(let c=0;c<=MAXCOLS;c+=20){
+    ctx.fillText(String(st.t-MAXCOLS+c<0?'':st.t-MAXCOLS+c),X(Math.min(c,MAXCOLS-1)),mt+ph+13);
+  }
+  ctx.textAlign='right';
+  ctx.fillText('время →',ml+pw,mt+ph+26);
+
+  setReadout(M.readout());
+}
+
+/* ============================ ИНТЕРФЕЙС ============================ */
+const qbox=document.getElementById('qbox'), desc=document.getElementById('desc'),
+      summary=document.getElementById('summary'), readout=document.getElementById('readout'),
+      chipsBox=document.getElementById('chips'), tabsBox=document.getElementById('tabs');
+
+function setReadout(h){ readout.innerHTML=h; }
+
+Object.keys(MODES).forEach(k=>{
+  const b=document.createElement('button');
+  b.className='tab'; b.textContent=MODES[k].tab; b.dataset.id=k;
+  b.addEventListener('click',()=>select(k));
+  tabsBox.appendChild(b);
+});
+const cmpBtn=document.createElement('button');
+cmpBtn.className='tab'; cmpBtn.textContent='Сравнение'; cmpBtn.dataset.id='cmp';
+cmpBtn.addEventListener('click',()=>select('cmp'));
+tabsBox.appendChild(cmpBtn);
+
+// таблица сравнения
+{
+  const t=document.getElementById('cmpTable');
+  let html='<tr><th></th>';
+  for(const k of Object.keys(MODES)) html+='<th>'+MODES[k].tab+'</th>';
+  html+='</tr>';
+  for(const row of CMP_ROWS){
+    html+='<tr><td>'+row[0]+'</td>';
+    for(let i=1;i<row.length;i++) html+='<td>'+row[i]+'</td>';
+    html+='</tr>';
+  }
+  t.innerHTML=html;
+}
+
+let chipSig='';
+function syncChips(){
+  chipSig='';
+  chipsBox.innerHTML='';
+  st.users.forEach((u,i)=>{
+    const ch=document.createElement('div');
+    ch.className='chip'; ch.dataset.id=u.id;
+    ch.innerHTML='<span class="dot" style="background:'+u.color+'"></span>'+u.name+
+      '<span class="st">'+(st.mode==='fdma'&&i>=8?'нет канала':(u.speaking?'говорит':'молчит'))+'</span>';
+    ch.addEventListener('click',()=>{
+      u.speaking=!u.speaking; u.left=9999;
+      if(document.getElementById('autoChk').checked){
+        document.getElementById('autoChk').checked=false; st.auto=false;
+      }
+      syncChipStates();
+    });
+    chipsBox.appendChild(ch);
+  });
+  chipSig=st.mode+'_'+st.users.length;
+}
+function syncChipStates(){
+  const sig=st.mode+'_'+st.users.length;
+  if(sig!==chipSig){ syncChips(); return; }
+  [...chipsBox.children].forEach(ch=>{
+    const u=st.users.find(x=>x.id===+ch.dataset.id);
+    const idx=st.users.indexOf(u);
+    const blocked=st.mode==='fdma'&&idx>=8;
+    ch.classList.toggle('talk',!!u&&u.speaking&&!blocked);
+    ch.classList.toggle('blocked',blocked);
+    ch.querySelector('.st').textContent=blocked?'нет канала':(u.speaking?'говорит':'молчит');
+  });
+}
+
+function select(id){
+  st.mode=id;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
+  const isCmp=(id==='cmp');
+  document.getElementById('canvasWrap').style.display=isCmp?'none':'block';
+  document.getElementById('cmpBox').style.display=isCmp?'block':'none';
+  document.getElementById('sidePanel').style.display=isCmp?'none':'block';
+  if(!isCmp){
+    const M=MODES[id];
+    qbox.innerHTML='<div class="q-tag">Вопрос аудитории</div><div class="q-text">'+M.question+'</div>';
+    desc.innerHTML=M.desc;
+    summary.innerHTML=M.summary;
+    document.getElementById('capCtl').style.display=(id==='cdma')?'block':'none';
+    reset();
+  }
+}
+
+/* контролы */
+const autoChk=document.getElementById('autoChk'),
+      actSlider=document.getElementById('actSlider'), actVal=document.getElementById('actVal'),
+      capSlider=document.getElementById('capSlider'), capVal=document.getElementById('capVal'),
+      spdSlider=document.getElementById('spdSlider'), spdVal=document.getElementById('spdVal'),
+      playBtn=document.getElementById('playBtn');
+function syncCtl(){
+  actSlider.value=Math.round(st.activity*100); actVal.textContent=Math.round(st.activity*100)+' %';
+  capSlider.value=st.cdmaCap; capVal.textContent=st.cdmaCap+' аб.';
+  spdSlider.value=st.speed; spdVal.textContent=st.speed+' мс';
+  playBtn.textContent=st.playing?'⏸ пауза':'▶ эфир';
+}
+autoChk.addEventListener('change',()=>{ st.auto=autoChk.checked; syncChipStates(); });
+actSlider.addEventListener('input',()=>{ st.activity=+actSlider.value/100; syncCtl(); });
+capSlider.addEventListener('input',()=>{ st.cdmaCap=+capSlider.value; syncCtl(); });
+spdSlider.addEventListener('input',()=>{ st.speed=+spdSlider.value; syncCtl(); restartTimer(); });
+playBtn.addEventListener('click',()=>{ st.playing=!st.playing; syncCtl(); });
+document.getElementById('addBtn').addEventListener('click',()=>{ addUser(); });
+document.getElementById('delBtn').addEventListener('click',()=>{ if(st.users.length>1){ st.users.pop(); syncChips(); } });
+document.getElementById('resetBtn').addEventListener('click',()=>reset());
+
+function reset(){
+  st.cols=[]; st.t=0; st.blockedTicks=0;
+  st.users.forEach(u=>{ u.speaking=Math.random()<st.activity; u.left=4+Math.floor(Math.random()*10); });
+  for(let k=0;k<MAXCOLS;k++) tick(true);   // предзаполняем ленту — экран сразу «живой»
+  syncChips();
+}
+
+/* ============================ ЗАПУСК ============================ */
+for(let i=0;i<4;i++) addUser();     // стартовые абоненты — после всех объявлений
+let timer=null;
+function restartTimer(){
+  if(timer) clearInterval(timer);
+  timer=setInterval(()=>{ if(st.playing&&st.mode!=='cmp') tick(); },st.speed);
+}
+select('fdma');
+syncCtl();
+restartTimer();
+
+let last=performance.now();
+function frame(){
+  draw();
+}
+setInterval(frame,40);
+window.addEventListener('resize',frame);
+</script>
+</body>
+</html>
