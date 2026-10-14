@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Радиовахта — тренажёр судовой УКВ-связи ГМССБ</title>
+<style>
+  :root{
+    --bg1:#0a121c; --bg2:#101d2c;
+    --body1:#333c47; --body2:#232a33; --edge:#161b21;
+    --disp:#0c1013; --amber:#ffb75e; --amberdim:#b37c3a;
+    --green:#4cd97b; --red:#e0564a; --blue:#6fd3ff;
+    --paper:#f3eedd; --ink:#2b2416;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    min-height:100vh; color:#dfe8f0;
+    background:radial-gradient(1200px 700px at 50% -10%, var(--bg2), var(--bg1));
+    font:14px/1.5 "Segoe UI", system-ui, Arial, sans-serif;
+    padding:18px 16px 30px;
+  }
+  header{max-width:1180px;margin:0 auto 14px;display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+  header h1{margin:0;font-size:20px;letter-spacing:.5px;color:#e8f0f8;font-weight:650}
+  header .sub{color:#8ea3b8;font-size:12.5px}
+
+  .deck{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:16px}
+  @media (max-width:980px){ .deck{grid-template-columns:1fr} }
+
+  /* ================= КОРПУС РАДИОСТАНЦИИ ================= */
+  .rig{
+    position:relative; border-radius:18px; padding:18px 20px 20px;
+    background:linear-gradient(160deg,var(--body1),var(--body2));
+    border:1px solid #444f5c;
+    box-shadow:0 2px 0 #131920, 0 18px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .rig::before{ /* болты */
+    content:""; position:absolute; inset:8px; border-radius:14px; pointer-events:none;
+    background:
+      radial-gradient(circle 3px at 10px 10px, #141a20 40%, transparent 50%),
+      radial-gradient(circle 3px at calc(100% - 10px) 10px, #141a20 40%, transparent 50%),
+      radial-gradient(circle 3px at 10px calc(100% - 10px), #141a20 40%, transparent 50%),
+      radial-gradient(circle 3px at calc(100% - 10px) calc(100% - 10px), #141a20 40%, transparent 50%);
+  }
+  .brand{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .brand .name{font-size:12px;letter-spacing:2.5px;color:#93a4b6;font-weight:700}
+  .brand .model{font-size:10.5px;color:#5d6d7c;letter-spacing:1px}
+  .lamp-row{display:flex;gap:14px;justify-content:flex-end;margin-bottom:8px}
+  .lamp{display:flex;gap:6px;align-items:center;font-size:10px;letter-spacing:1.5px;color:#7d8fa1}
+  .lamp i{width:9px;height:9px;border-radius:50%;background:#22282f;box-shadow:inset 0 0 3px #000;display:inline-block}
+  .lamp.on i{background:var(--green);box-shadow:0 0 8px rgba(76,217,123,.8)}
+  .lamp.warn.on i{background:var(--red);box-shadow:0 0 8px rgba(224,86,74,.9)}
+  .lamp.amber.on i{background:var(--amber);box-shadow:0 0 8px rgba(255,183,94,.8)}
+
+  /* дисплей */
+  .lcd{
+    background:var(--disp); border-radius:10px; border:1px solid #0a0d10;
+    box-shadow:inset 0 0 22px rgba(0,0,0,.85), inset 0 2px 6px rgba(0,0,0,.6);
+    padding:12px 16px; margin-bottom:12px; position:relative; overflow:hidden;
+  }
+  .lcd::after{ content:""; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); }
+  .lcd .row1{display:flex;justify-content:space-between;align-items:flex-end;color:var(--amberdim);font-size:11px;letter-spacing:1.5px}
+  .lcd .ch{font:700 64px/1 "Consolas","Menlo",monospace;color:var(--amber);text-shadow:0 0 14px rgba(255,183,94,.55);letter-spacing:2px}
+  .lcd .row2{display:flex;justify-content:space-between;margin-top:8px;color:var(--amber);font:600 15px "Consolas",monospace;letter-spacing:1px}
+  .lcd .row3{display:flex;gap:16px;margin-top:6px;color:var(--amberdim);font:600 11px "Consolas",monospace;letter-spacing:1px}
+  .lcd .msg{margin-top:8px;color:var(--amber);font:14px "Consolas",monospace;min-height:20px;opacity:.9}
+  .lcd .blip{position:absolute;top:8px;right:10px;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:bl 1.2s infinite}
+  @keyframes bl{50%{opacity:.25}}
+
+  /* ручка + кнопки каналов */
+  .controls{display:grid;grid-template-columns:118px 1fr;gap:14px;align-items:center;margin-bottom:12px}
+  .knobwrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .knob{
+    width:104px;height:104px;border-radius:50%;cursor:pointer;position:relative;user-select:none;
+    background:
+      conic-gradient(#3a4450 0 8deg,#2b333d 8deg 22deg,#3a4450 22deg 30deg,#2b333d 30deg 44deg,#3a4450 44deg 52deg,#2b333d 52deg 66deg,#3a4450 66deg 74deg,#2b333d 74deg 88deg,#3a4450 88deg 96deg,#2b333d 96deg 110deg,#3a4450 110deg 118deg,#2b333d 118deg 132deg,#3a4450 132deg 140deg,#2b333d 140deg 154deg,#3a4450 154deg 162deg,#2b333d 162deg 176deg,#3a4450 176deg 184deg,#2b333d 184deg 198deg,#3a4450 198deg 206deg,#2b333d 206deg 220deg,#3a4450 220deg 228deg,#2b333d 228deg 242deg,#3a4450 242deg 250deg,#2b333d 250deg 264deg,#3a4450 264deg 272deg,#2b333d 272deg 286deg,#3a4450 286deg 294deg,#2b333d 294deg 308deg,#3a4450 308deg 316deg,#2b333d 316deg 330deg,#3a4450 330deg 338deg,#2b333d 338deg 352deg,#3a4450 352deg 360deg);
+    box-shadow:0 6px 14px rgba(0,0,0,.55), inset 0 2px 4px rgba(255,255,255,.12), inset 0 -4px 8px rgba(0,0,0,.5);
+    border:2px solid #171d24;
+  }
+  .knob::after{content:"";position:absolute;left:50%;top:9px;width:5px;height:26px;transform:translateX(-50%);
+    border-radius:3px;background:var(--amber);box-shadow:0 0 8px rgba(255,183,94,.7)}
+  .knoblabel{font-size:10px;letter-spacing:2px;color:#7d8fa1}
+  .chbtns{display:flex;flex-wrap:wrap;gap:6px}
+  .chbtn{
+    background:#2a313a;border:1px solid #171d24;border-radius:7px;color:#b8c6d4;
+    padding:7px 10px;font:600 12.5px "Consolas",monospace;cursor:pointer;min-width:44px;
+    box-shadow:0 2px 0 #151b21;
+  }
+  .chbtn:hover{border-color:#3d4a57;color:#dfe8f0}
+  .chbtn.sel{background:#4a350f;border-color:var(--amber);color:var(--amber);box-shadow:0 0 0 1px rgba(255,183,94,.35),0 2px 0 #151b21}
+
+  /* режим вызова + PTT + DISTRESS */
+  .actions{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:stretch}
+  .mode{display:flex;flex-direction:column;gap:8px;justify-content:center}
+  .mode .lab{font-size:10px;letter-spacing:2px;color:#7d8fa1}
+  .toggle{display:flex;border:1px solid #171d24;border-radius:9px;overflow:hidden;background:#20262e}
+  .toggle button{
+    flex:1;padding:9px 14px;background:transparent;border:0;color:#8fa0b1;
+    font:600 12.5px "Segoe UI";cursor:pointer;letter-spacing:.5px;
+  }
+  .toggle button.sel{background:#4a350f;color:var(--amber)}
+  .ptt{
+    border:0;border-radius:12px;cursor:pointer;padding:0 26px;align-self:stretch;
+    background:linear-gradient(180deg,#3d4a57,#2b333d);color:#dfe8f0;
+    font:800 15px "Segoe UI";letter-spacing:1.5px;border:1px solid #171d24;
+    box-shadow:0 5px 0 #151b21, inset 0 1px 0 rgba(255,255,255,.1);user-select:none;
+  }
+  .ptt:active,.ptt.hot{transform:translateY(3px);box-shadow:0 2px 0 #151b21;background:linear-gradient(180deg,#4cd97b,#2fae64);color:#08240f}
+  .distresswrap{position:relative;padding:12px;border:2px dashed #7a6420;border-radius:12px;background:#201408}
+  .distress{
+    width:64px;height:64px;border-radius:50%;border:3px solid #7a1810;cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, #ff6f5f, #c62114 70%);
+    box-shadow:0 4px 10px rgba(0,0,0,.6), inset 0 -4px 8px rgba(0,0,0,.45);
+    color:#fff;font:800 9px "Segoe UI";letter-spacing:.5px;text-transform:uppercase;
+    transition:transform .1s;
+  }
+  .distress:disabled{filter:grayscale(.7) brightness(.6);cursor:not-allowed}
+  .distress:not(:disabled):active{transform:scale(.94)}
+  .cover{
+    position:absolute;left:50%;top:50%;width:86px;height:86px;border-radius:50%;
+    transform:translate(-50%,-50%) rotate(0deg);transform-origin:78% 50%;
+    background:linear-gradient(135deg,#b98a1f,#8a6512);cursor:pointer;
+    box-shadow:0 6px 14px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.25);
+    font:700 8.5px "Segoe UI";color:#40300a;letter-spacing:.5px;
+    display:flex;align-items:center;justify-content:center;text-align:center;transition:transform .25s;
+  }
+  .cover.open{transform:translate(-50%,-50%) rotate(-112deg)}
+  .coverhint{font-size:10px;color:#b39153;margin-top:6px;text-align:center}
+
+  /* ================= ЖУРНАЛ И ЗАДАНИЯ ================= */
+  .paper{
+    background:var(--paper);color:var(--ink);border-radius:14px;padding:16px 18px;
+    box-shadow:0 14px 34px rgba(0,0,0,.45), inset 0 0 60px rgba(160,120,40,.12);
+    border:1px solid #c9bfa0;position:relative;
+  }
+  .paper::before{content:"РК-7 · РАДИОЖУРНАЛ ВАХТЕННОГО СЛУЖБЫ";position:absolute;top:-11px;left:18px;
+    background:#22303e;color:#e8f0f8;font-size:10px;letter-spacing:2px;padding:3px 10px;border-radius:6px;border:1px solid #444f5c}
+  .paper h3{margin:6px 0 4px;font-size:15px;color:#1f4c72}
+  .paper .meta{font-size:11.5px;color:#6b5d40;margin-bottom:10px}
+  .paper .task{font-size:13.5px;line-height:1.55;border:1px solid #d8cdb2;border-radius:8px;padding:10px 12px;background:#efe8d4}
+  .log{font:12.2px/1.65 "Consolas","Menlo",monospace;min-height:150px;max-height:260px;overflow:auto;margin-top:10px}
+  .log .ln{display:flex;gap:8px;padding:3px 6px;border-bottom:1px dashed #d8cdb2}
+  .log .who{min-width:96px;font-weight:700;color:#1f4c72}
+  .log .bad{color:#a3261b}
+  .log .good{color:#1e7a44}
+  .paper .foot{font-size:10.5px;color:#8a7a52;margin-top:8px;text-align:right}
+
+  .score{display:flex;gap:10px;align-items:center;margin:12px 0 0}
+  .score .s{background:#132030;border:1px solid #3a4a5c;border-radius:10px;padding:8px 14px;color:#e8f0f8;font:700 15px "Consolas",monospace}
+  .score .s b{color:var(--amber)}
+  .nextbtn{
+    margin-left:auto;border:0;border-radius:10px;padding:10px 18px;cursor:pointer;
+    background:linear-gradient(180deg,#0e6ba8,#0a4f7f);color:#fff;font:700 13.5px "Segoe UI";
+    box-shadow:0 3px 0 #062f4a;
+  }
+  .nextbtn:active{transform:translateY(2px)}
+
+  /* ================= СПРАВОЧНИК ================= */
+  .ref{max-width:1180px;margin:16px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+  .refcard{background:rgba(16,29,44,.85);border:1px solid #223347;border-radius:12px;padding:12px 14px}
+  .refcard h4{margin:0 0 8px;font-size:12px;letter-spacing:1.5px;color:#9db2c8;text-transform:uppercase}
+  .refcard table{width:100%;border-collapse:collapse;font:12px/1.5 "Consolas",monospace;color:#cfe0ee}
+  .refcard td{padding:3px 6px;border-bottom:1px solid #1b2a3a}
+  .refcard td:last-child{color:#8ea3b8}
+</style>
+</head>
+<body>
+<header>
+  <h1>Радиовахта</h1>
+  <div class="sub">тренажёр судовой УКВ-связи ГМССБ · каналы, ЦИВ, районы плавания A1–A4 · по материалам лекции 5 «Надводная морская связь»</div>
+</header>
+
+<main class="deck">
+  <!-- РАДИОСТАНЦИЯ -->
+  <section class="rig">
+    <div class="brand">
+      <span class="name">ОКЕАН-25 · УКВ-Р/Т · ГМССБ</span>
+      <span class="model">SERIAL 25/2026-B · 25 W</span>
+    </div>
+    <div class="lamp-row">
+      <span class="lamp amber" id="lampDsc"><i></i>ЦИВ</span>
+      <span class="lamp" id="lampTx"><i></i>ПЕРЕДАЧА</span>
+      <span class="lamp warn" id="lampAl"><i></i>ТРЕВОГА</span>
+    </div>
+
+    <div class="lcd">
+      <div class="row1"><span>КАНАЛ УКВ · МОРСКОЙ ПОДВИЖНЫЙ</span><span class="blip"></span></div>
+      <div class="ch" id="lcdCh">16</div>
+      <div class="row2"><span id="lcdFreq">156,800 МГц</span><span id="lcdMode">СИМПЛЕКС</span></div>
+      <div class="row3"><span>НАЗНАЧЕНИЕ: <b id="lcdUse">БЕДСТВИЕ · БЕЗОПАСНОСТЬ · ВЫЗОВ</b></span></div>
+      <div class="msg" id="lcdMsg">…вахта открыта · канал 16 назначен к прослушиванию</div>
+    </div>
+
+    <div class="controls">
+      <div class="knobwrap">
+        <div class="knob" id="knob" title="Клик по левой/правой половине — вращение ручки"></div>
+        <span class="knoblabel">СЕЛЕКТОР КАНАЛОВ</span>
+      </div>
+      <div class="chbtns" id="chbtns"></div>
+    </div>
+
+    <div class="actions">
+      <div class="mode">
+        <span class="lab">СПОСОБ ВЫЗОВА</span>
+        <div class="toggle">
+          <button id="mVoice" class="sel">ГОЛОС (Р/Т)</button>
+          <button id="mDsc">ЦИВ DSC (канал 70)</button>
+        </div>
+        <span class="lab" style="color:#5d6d7c" id="modeNote">голос: на выбранном канале</span>
+      </div>
+      <div class="distresswrap">
+        <button class="distress" id="distBtn" disabled>SOS<br>DISTRESS</button>
+        <div class="cover open" id="distCover" title="Откинуть/закрыть крышку">КРЫШКА<br>ОТКРЫТА</div>
+        <div class="coverhint">клик по крышке</div>
+      </div>
+      <button class="ptt" id="ptt">PTT<br>ПЕРЕДАТЬ</button>
+    </div>
+
+    <div class="score">
+      <span class="s">СМЕНА <b id="scScene">1/6</b></span>
+      <span class="s">ОЧКИ <b id="scScore">0</b></span>
+      <button class="nextbtn" id="nextBtn">СЛЕДУЮЩИЙ СЦЕНАРИЙ →</button>
+    </div>
+  </section>
+
+  <!-- ЖУРНАЛ -->
+  <section class="paper">
+    <h3 id="taskTitle">Задание вахты</h3>
+    <div class="meta" id="taskMeta"></div>
+    <div class="task" id="taskText"></div>
+    <div class="log" id="log"></div>
+    <div class="foot">журнал ведётся автоматически · формулировки вызовов — по Правилам радиосвязи морской подвижной службы</div>
+  </section>
+</main>
+
+<!-- СПРАВОЧНИК -->
+<section class="ref">
+  <div class="refcard">
+    <h4>Каналы УКВ (156–174 МГц)</h4>
+    <table id="refCh"></table>
+  </div>
+  <div class="refcard">
+    <h4>Частоты бедствия и безопасности</h4>
+    <table id="refDist"></table>
+  </div>
+  <div class="refcard">
+    <h4>Морские районы ГМССБ</h4>
+    <table id="refAreas"></table>
+  </div>
+</section>
+
+<footer style="max-width:1180px;margin:14px auto 0;color:#71879c;font-size:11px">
+  Учебный демонстратор по лекции 5. Сценарии построены на правилах лекции: канал 16 — вызовы бедствия и
+  общего вызова, переговоры на нём и на 70-м запрещены; канал 70 — только цифровая информация ЦИВ;
+  сигнал бедствия передаётся на симплексных частотах.
+</footer>
+
+<script>
+'use strict';
+
+/* ============================ КАНАЛЫ (лекция 5) ============================ */
+const CHANNELS = {
+  16:{freq:'156,800', use:'БЕДСТВИЕ · СРОЧНОСТЬ · БЕЗОПАСНОСТЬ · ВЫЗОВ', duplex:false},
+  70:{freq:'156,525', use:'ЦИВ — ТОЛЬКО ЦИФРОВАЯ ИНФОРМАЦИЯ', duplex:false},
+  13:{freq:'156,650', use:'МОСТИК-МОСТИК · БЕЗОПАСНОСТЬ ДВИЖЕНИЯ', duplex:false},
+  9: {freq:'156,450', use:'ВЫЗЫВНОЙ В РАЙОНАХ ИНТЕНСИВНОГО СУДОХОДСТВА', duplex:false},
+  68:{freq:'156,425', use:'РАБОЧИЙ · СУДС (ПОРТ ПРИМОРСК)', duplex:false},
+  15:{freq:'156,750', use:'ВНУТРИСУДОВАЯ СВЯЗЬ · МОЩНОСТЬ <= 1 ВТ', duplex:false}
+};
+const ORDER = [16, 70, 13, 9, 68, 15];
+let curCh = 16;
+let knobAngle = 0;
+const chIdx = () => ORDER.indexOf(curCh);
+
+/* ============================ СЦЕНАРИИ ============================ */
+const SCENES = [
+  {
+    title:'Сценарий 1 · Сигнал бедствия',
+    meta:'Район плавания A1 · судно на ходу · радиовахта на 16-м канале',
+    text:'Ваше судно терпит бедствие: затопление машинного отделения, необходима немедленная помощь. Подайте оповещение о бедствии так, как предписывает ГМССБ. Помните: кнопка DISTRESS передаёт ЦИВ через канал 70, а голосовой вызов «MAYDAY» — на 16-м.',
+    plate:'SOS',
+    answer:{ch:70, mode:'dsc'},
+    good:'ЦИВ-оповещение о бедствии ушло через канал 70, судовой 16-й канал остался свободным для голосового вызова «MAYDAY». Координаты и MMSI переданы автоматически.',
+    bad_txt:{
+      ch:'Не тот канал: оповещение о бедствии через ЦИВ передаётся на 70-м канале (только цифровая информация).',
+      mode:'ЦИВ бедствия нельзя отправить голосом: используйте кнопку DISTRESS (автоматический посыл ЦИВ на 70-м канале).',
+      ch_and_mode:'Оповещение о бедствии через ЦИВ — это канал 70 и кнопка DISTRESS.'
+    },
+    fine:false
+  },
+  {
+    title:'Сценарий 2 · СУДС порта Приморск',
+    meta:'Район A1 · следование с севера · траверз мыса Пологий',
+    text:'Вы подошли к акватории порта Приморск. По местным Правилам плавания маломерные и малые суда обязаны связаться с СУДС Приморск («Приморск-Трафик») на траверзе мыса Пологий. Выберите рабочий канал СУДС и доложитесь.',
+    plate:'ПРИМОРСК-ТРАФИК, ЭТО СУХОГРУЗ «ВОЛГА», ОЖИДАЮ ПРОХОЖДЕНИЕ АКВАТОРИИ, ТРАВЕРЗ МЫСА ПОЛОГИЙ.',
+    answer:{ch:68, mode:'voice'},
+    good:'Верно: основной канал СУДС Приморск — 68-й (резервный — 13-й). В зоне действия СУДС судно несёт радиовахту на 68-м и исполняет указания об очередности, маршруте и скорости.',
+    bad_txt:{
+      ch:'Не тот канал: СУДС Приморск работает на 68-м канале (резерв — 13-й). 16-й для переговоров запрещён.',
+      mode:'Переговоры с СУДС ведутся голосом на рабочем канале; ЦИВ здесь не используется.',
+      ch_and_mode:'СУДС Приморск: канал 68, голос.'
+    },
+    fine:false
+  },
+  {
+    title:'Сценарий 3 · Расхождение в узкости',
+    meta:'Район A1 · узкость · обгон маломерного судна',
+    text:'Вы входите в узкость и намерены предупредить встречное судно о расхождении. Правила предписывают переговоры «мостик–мостик» на специальной частоте. Выберите канал и вызовите встречное судно.',
+    plate:'СУДНО БОРТ У СКОБКИ, ЭТО Т/Х «ПЕТРОЗАВОДСК», РАСХОДИМСЯ ПРАВЫМИ БОРТАМИ, СЛЕДУЮ В УЗКОСТИ ВВЕРХ.',
+    answer:{ch:13, mode:'voice'},
+    good:'Верно: переговоры «мостик–мостик» ведутся на 13-м канале (156,650 МГц). Он используется для обеспечения безопасного движения и расхождения судов.',
+    bad_txt:{
+      ch:'Не тот канал: переговоры «мостик–мостик» ведутся на 13-м канале.',
+      mode:'«Мостик–мостик» — только голосом на 13-м канале.',
+      ch_and_mode:'Расхождение судов: канал 13, голос.'
+    },
+    fine:false
+  },
+  {
+    title:'Сценарий 4 · Вызов в густом движении',
+    meta:'Район A1 · район интенсивного судоходства · 16-й канал перегружен',
+    text:'На 16-м канале перегружен радиообмен, вам нужно сделать обычный вызов другому судну для согласования графиков. По правилам в районах с интенсивным движением для вызова используется резервный вызывной канал. Найдите его и вызывайте.',
+    plate:'СУДНО «ШТОРМ», ЭТО «ВОЛГА», ПЕРЕХОДИМ НА РАБОЧИЙ КАНАЛ, ПРИЁМ.',
+    answer:{ch:9, mode:'voice'},
+    good:'Верно: в районах с интенсивным судоходством вызов производится на 9-м резервном канале (156,450 МГц), а переговоры — на согласованном рабочем.',
+    bad_txt:{
+      ch:'Не тот канал: резервный вызывной канал в таких районах — 9-й.',
+      mode:'Это голосовой вызов; ЦИВ на 70-м для таких переговоров не применяется.',
+      ch_and_mode:'Вызов в густом движении: канал 9, голос.'
+    },
+    fine:false
+  },
+  {
+    title:'Сценарий 5 · Внутрисудовая связь',
+    meta:'Район A1 · использование портативной станции на борту',
+    text:'Капитану нужно связаться с машинным отделением со своего мостика. Для внутрисудовой связи используется отдельная частота с ограничением мощности. Выберите канал и передайте.',
+    plate:'МАШИННОЕ ОТДЕЛЕНИЕ, ЭТО МОСТИК, ПОДГОТОВЬТЕ ГЛАВНЫЙ ДВИГАТЕЛЬ К РЕВЕРСУ.',
+    answer:{ch:15, mode:'voice'},
+    good:'Верно: внутрисудовая связь — каналы 15/17, передатчик мощностью не более 1 Вт.',
+    bad_txt:{
+      ch:'Не тот канал: для внутрисудовой связи используются 15-й и 17-й каналы с ограниченной мощностью.',
+      mode:'Внутрисудовые переговоры — голосовые.',
+      ch_and_mode:'Внутрисудовая связь: канал 15 (или 17), голос, до 1 Вт.'
+    },
+    fine:false
+  },
+  {
+    title:'Сценарий 6 · Тревога на 16-м',
+    meta:'Район A1 · ведёте радиовахту на 16-м канале',
+    text:'Вы услышали на 16-м канале сигнал тревоги. Подтвердите приём тревоги на том же канале, не мешая вызову, и подготовьтесь к записи переговоров.',
+    plate:'ВЕДУ РАДИОВАХТУ НА 16-М КАНАЛЕ, ТРЕВОГУ ПРИНЯЛ, ЗАПИСЫВАЮ.',
+    answer:{ch:16, mode:'voice'},
+    good:'Верно: приём тревоги подтверждается на 16-м канале. На судах на ходу радиостанция всегда включена на прослушивание 16-го канала — это обязательная радиовахта.',
+    bad_txt:{
+      ch:'Радиовахта при тревоге продолжается на 16-м канале — не уходите с него.',
+      mode:'Подтверждение приёма тревоги — голосом на 16-м канале.',
+      ch_and_mode:'Подтверждение приёма тревоги: канал 16, голос.'
+    },
+    fine:false
+  }
+];
+let idx=0, score=0, answered=false;
+
+/* ============================ UI ============================ */
+const $=id=>document.getElementById(id);
+
+function beep(f,ms){
+  try{
+    const a=new (window.AudioContext||window.webkitAudioContext)();
+    const o=a.createOscillator(), g=a.createGain();
+    o.frequency.value=f; o.type='square'; o.connect(g); g.connect(a.destination);
+    g.gain.value=.04; o.start(); o.stop(a.currentTime+ms/1000);
+    setTimeout(()=>a.close(), ms+50);
+  }catch(e){}
+}
+
+function setChannel(ch){
+  curCh = ch;
+  const c = CHANNELS[ch];
+  $('lcdCh').textContent = ch;
+  $('lcdFreq').textContent = c.freq + ' МГц';
+  $('lcdMode').textContent = c.duplex ? 'ДУПЛЕКС' : 'СИМПЛЕКС';
+  $('lcdUse').textContent = c.use;
+  document.querySelectorAll('.chbtn').forEach(b=>b.classList.toggle('sel', +b.dataset.ch===ch));
+  $('lampDsc').classList.toggle('on', ch===70);
+  $('lampTx').classList.remove('on');
+}
+function setMode(m){
+  document.getElementById('mVoice').classList.toggle('sel', m==='voice');
+  document.getElementById('mDsc').classList.toggle('sel', m==='dsc');
+  document.getElementById('modeNote').textContent =
+    m==='voice' ? 'голос: на выбранном канале' : 'ЦИВ: передаётся на канале 70';
+  document.getElementById('lampDsc').classList.toggle('on', m==='dsc' || curCh===70);
+}
+
+/* ручка: клики по половинам */
+const knob=document.getElementById('knob');
+knob.addEventListener('click', e=>{
+  const r=knob.getBoundingClientRect();
+  const side = e.clientX > r.left + r.width/2 ? 1 : -1;
+  knobAngle += side*30;
+  knob.style.transform = `rotate(${knobAngle}deg)`;
+  const i=(chIdx()+side+ORDER.length)%ORDER.length;
+  setChannel(ORDER[i]);
+  beep(700, 60);
+});
+
+/* кнопки каналов */
+const chbtns=document.getElementById('chbtns');
+ORDER.forEach(ch=>{
+  const b=document.createElement('button');
+  b.className='chbtn'; b.dataset.ch=ch; b.textContent='К'+ch;
+  b.addEventListener('click',()=>{ setChannel(ch); knobAngle = ORDER.indexOf(ch)*30; knob.style.transform=`rotate(${knobAngle}deg)`; beep(700,60); });
+  chbtns.appendChild(b);
+});
+
+/* способы вызова */
+document.getElementById('mVoice').addEventListener('click',()=>setMode('voice'));
+document.getElementById('mDsc').addEventListener('click',()=>setMode('dsc'));
+
+/* крышка и DISTRESS */
+const cover=document.getElementById('distCover'), distBtn=document.getElementById('distBtn');
+cover.addEventListener('click',()=>{
+  cover.classList.toggle('open');
+  const open=cover.classList.contains('open');
+  cover.textContent = open ? 'КРЫШКА ОТКРЫТА' : 'КРЫШКА ЗАКРЫТА';
+  distBtn.disabled = !open;
+  beep(open?900:400, 80);
+});
+distBtn.addEventListener('click',()=>{
+  if(distBtn.disabled) return;
+  if(answered){ addLog('СИСТЕМА','Сценарий уже оценён — нажмите «СЛЕДУЮЩИЙ СЦЕНАРИЙ».'); return; }
+  addLog('ПРИБОР','кнопка DISTRESS: защитная крышка открыта, посыл ЦИВ автоматически');
+  setChannel(70); setMode('dsc'); knobAngle=ORDER.indexOf(70)*30; knob.style.transform=`rotate(${knobAngle}deg)`;
+  transmit();
+});
+
+/* ============================ ЛОГ И ПРОВЕРКА ============================ */
+const log=document.getElementById('log');
+function addLog(who,txt,cls){
+  const l=document.createElement('div');
+  l.className='ln'+(cls?' '+cls:'');
+  l.innerHTML=`<span class="who">${who}</span><span>${txt}</span>`;
+  log.appendChild(l); log.scrollTop=log.scrollHeight;
+}
+
+function transmit(){
+  if(answered) { addLog('СИСТЕМА','Сценарий уже оценён — нажмите «СЛЕДУЮЩИЙ СЦЕНАРИЙ».'); return; }
+  const sc=SCENES[idx];
+  const s={ch:curCh, mode:$('mDsc').classList.contains('sel')?'dsc':'voice'};
+  $('lampTx').classList.add('on');
+  beep(50*0+600,120);
+  const phrase = sc.plate;
+  const chOk = s.ch===sc.answer.ch;
+  const mdOk = s.mode===sc.answer.mode;
+  answered=true;
+  score += (chOk&&mdOk)?10:0;
+  document.getElementById('scScore').textContent=score;
+  const verdict = (chOk&&mdOk) ? '✓ '+sc.good
+                : '✕ '+(s.ch!==sc.answer.ch&&s.mode!==sc.answer.mode ? sc.bad_txt.ch_and_mode
+                        : (s.ch!==sc.answer.ch ? sc.bad_txt.ch : sc.bad_txt.mode));
+  addLog('ФОРМАТ', `канал ${s.ch} · способ ${s.mode==='dsc'?'ЦИВ':'голос'}`);
+  addLog(s.mode==='dsc'?'ЦИВ (70)':'ГОЛОС К'+s.ch,
+    s.mode==='dsc' ? 'ЦИВ: MMSI 273… · координаты авто · передача на канале 70' : phrase);
+  setTimeout(()=>{
+    addLog('ОЦЕНКА', verdict, (chOk&&mdOk)?'good':'bad');
+    document.getElementById('lampTx').classList.remove('on');
+    document.getElementById('nextBtn').focus();
+  }, 350);
+  if(sc.answer.mode==='voice'&&!chOk) $('lcdMsg').textContent='передача на испытуемом канале…';
+  else $('lcdMsg').textContent = s.mode==='dsc' ? 'ЦИВ подтверждён · канал 70 · 156,525 МГц' : 'текущая передача · канал '+s.ch+' · '+CHANNELS[s.ch].freq+' МГц';
+}
+
+document.getElementById('ptt').addEventListener('click',transmit);
+document.addEventListener('keydown',e=>{ if(e.code==='Space'&&!e.repeat){e.preventDefault();transmit();} });
+
+/* ============================ СЦЕНАРИИ ============================ */
+function loadScene(i){
+  idx=i; answered=false;
+  const sc=SCENES[i];
+  document.getElementById('taskTitle').textContent=sc.title;
+  document.getElementById('taskMeta').textContent='Обстановка вахты · '+sc.meta;
+  document.getElementById('taskText').textContent=sc.text;
+  document.getElementById('scScene').textContent=(i+1)+'/'+SCENES.length;
+  setChannel(16); setMode('voice'); knobAngle=ORDER.indexOf(16)*30;
+  knob.style.transform='rotate(0deg)';
+  cover.classList.add('open'); cover.textContent='КРЫШКА ОТКРЫТА'; distBtn.disabled=false;
+  addLog('ВАХТА', '— смена принята · '+sc.title+' —','good');
+}
+document.getElementById('nextBtn').addEventListener('click',()=>{
+  loadScene((idx+1)%SCENES.length);
+});
+
+/* ============================ СПРАВОЧНИКИ ============================ */
+const refCh=document.getElementById('refCh');
+ORDER.forEach(ch=>{
+  const r=document.createElement('tr');
+  r.innerHTML=`<td>${ch}</td><td>${CHANNELS[ch].freq} МГц</td><td>${CHANNELS[ch].use.toLowerCase()}</td>`;
+  refCh.appendChild(r);
+});
+const refDist=document.getElementById('refDist');
+[
+  ['16','156,800 МГц','голос: бедствие, срочность, безопасность'],
+  ['70','156,525 МГц','ЦИВ — только цифровая информация'],
+  ['2182 кГц','ПВ','голосовое бедствие в ПВ-диапазоне'],
+  ['121,5 МГц','авиа','второй канал EPIRB для пеленгования авиацией'],
+  ['406 МГц','EPIRB','аварийный радиобуй КОСПАС-SARSAT'],
+  ['9,2–9,5 ГГц','SART','радиолокационный ответчик для судовых РЛС']
+].forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td>`; refDist.appendChild(tr); });
+const refAreas=document.getElementById('refAreas');
+[
+  ['A1','зона береговой УКВ-станции, ~30 миль, каналы 16 и 70 (ЦИВ)'],
+  ['A2','зона береговой ПВ-станции, ~150 миль, ЦИВ 2187,5 кГц'],
+  ['A3','зона геостационарных спутников ИНМАРСАТ (≈ до 70° широты)'],
+  ['A4','остальные районы — полярные (кроме A1, A2, A3)']
+].forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td>`; refAreas.appendChild(tr); });
+
+/* ============================ СТАРТ ============================ */
+setChannel(16);
+loadScene(0);
+</script>
+</body>
+</html>
